@@ -13,8 +13,8 @@ from audio_hw_framework.device.models import (
 )
 
 
-def test_matches_name_contains() -> None:
-    device = AudioDevice(
+def create_scarlett_device() -> AudioDevice:
+    return AudioDevice(
         index=0,
         name="Focusrite Scarlett 2i2 USB",
         host_api_index=0,
@@ -23,6 +23,10 @@ def test_matches_name_contains() -> None:
         max_output_channels=2,
         default_sample_rate=48_000,
     )
+
+
+def test_matches_name_contains() -> None:
+    device = create_scarlett_device()
 
     assert device_matches(
         device,
@@ -31,20 +35,45 @@ def test_matches_name_contains() -> None:
 
 
 def test_matches_exact_name() -> None:
-    device = AudioDevice(
-        index=0,
-        name="Focusrite Scarlett 2i2 USB",
-        host_api_index=0,
-        host_api_name="WASAPI",
-        max_input_channels=2,
-        max_output_channels=2,
-        default_sample_rate=48_000,
-    )
+    device = create_scarlett_device()
 
     assert device_matches(
         device,
         DeviceMatchConfig(
             exact_name="Focusrite Scarlett 2i2 USB",
+        ),
+    )
+
+
+def test_exact_name_case_insensitive() -> None:
+    device = create_scarlett_device()
+
+    assert device_matches(
+        device,
+        DeviceMatchConfig(
+            exact_name="focusrite scarlett 2i2 usb",
+        ),
+    )
+
+
+def test_exact_name_mismatch() -> None:
+    device = create_scarlett_device()
+
+    assert not device_matches(
+        device,
+        DeviceMatchConfig(
+            exact_name="RME Babyface Pro FS",
+        ),
+    )
+
+
+def test_name_contains_mismatch() -> None:
+    device = create_scarlett_device()
+
+    assert not device_matches(
+        device,
+        DeviceMatchConfig(
+            name_contains="babyface",
         ),
     )
 
@@ -63,7 +92,6 @@ def test_rejects_insufficient_input_channels() -> None:
     assert not device_matches(
         device,
         DeviceMatchConfig(
-            name_contains="microphone",
             minimum_input_channels=2,
         ),
     )
@@ -83,22 +111,13 @@ def test_rejects_insufficient_output_channels() -> None:
     assert not device_matches(
         device,
         DeviceMatchConfig(
-            name_contains="speaker",
             minimum_output_channels=2,
         ),
     )
 
 
 def test_find_matching_devices_returns_matches() -> None:
-    scarlett = AudioDevice(
-        index=0,
-        name="Focusrite Scarlett 2i2 USB",
-        host_api_index=0,
-        host_api_name="WASAPI",
-        max_input_channels=2,
-        max_output_channels=2,
-        default_sample_rate=48_000,
-    )
+    scarlett = create_scarlett_device()
 
     microphone = AudioDevice(
         index=1,
@@ -119,15 +138,7 @@ def test_find_matching_devices_returns_matches() -> None:
 
 
 def test_find_unique_device_returns_device() -> None:
-    scarlett = AudioDevice(
-        index=0,
-        name="Focusrite Scarlett 2i2 USB",
-        host_api_index=0,
-        host_api_name="WASAPI",
-        max_input_channels=2,
-        max_output_channels=2,
-        default_sample_rate=48_000,
-    )
+    scarlett = create_scarlett_device()
 
     microphone = AudioDevice(
         index=1,
@@ -166,15 +177,7 @@ def test_find_unique_device_raises_when_no_match() -> None:
 
 
 def test_find_unique_device_raises_when_ambiguous() -> None:
-    scarlett_1 = AudioDevice(
-        index=0,
-        name="Focusrite Scarlett 2i2 USB",
-        host_api_index=0,
-        host_api_name="WASAPI",
-        max_input_channels=2,
-        max_output_channels=2,
-        default_sample_rate=48_000,
-    )
+    scarlett_1 = create_scarlett_device()
 
     scarlett_2 = AudioDevice(
         index=1,

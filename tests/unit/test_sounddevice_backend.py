@@ -6,6 +6,13 @@ from audio_hw_framework.backend.base import DeviceEnumerationError
 from audio_hw_framework.backend.sounddevice_backend import SoundDeviceBackend
 
 
+def test_backend_info() -> None:
+    backend = SoundDeviceBackend()
+
+    assert backend.info.name == "portaudio"
+    assert backend.info.library == "sounddevice"
+
+
 def test_maps_sounddevice_results(monkeypatch: MonkeyPatch) -> None:
     fake_devices = [
         {
@@ -13,7 +20,7 @@ def test_maps_sounddevice_results(monkeypatch: MonkeyPatch) -> None:
             "hostapi": 0,
             "max_input_channels": 2,
             "max_output_channels": 2,
-            "default_samplerate": 48000,
+            "default_samplerate": 48_000,
         }
     ]
 
@@ -28,6 +35,7 @@ def test_maps_sounddevice_results(monkeypatch: MonkeyPatch) -> None:
     assert len(result) == 1
     assert result[0].name == "Scarlett"
     assert result[0].max_input_channels == 2
+    assert result[0].max_output_channels == 2
 
 
 def test_translates_portaudio_errors(monkeypatch: MonkeyPatch) -> None:

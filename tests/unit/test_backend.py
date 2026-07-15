@@ -16,11 +16,19 @@ def test_fake_backend_returns_devices() -> None:
         host_api_name="WASAPI",
         max_input_channels=2,
         max_output_channels=2,
-        default_sample_rate=48000,
+        default_sample_rate=48_000,
     )
 
-    backend = FakeAudioBackend(devices=[device])
+    backend = FakeAudioBackend(
+        devices=[device],
+    )
 
     result = backend.list_devices()
 
     assert result == [device]
+
+
+def test_fake_backend_returns_empty_list() -> None:
+    backend = FakeAudioBackend()
+
+    assert backend.list_devices() == []
