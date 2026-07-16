@@ -1,5 +1,6 @@
 device:
-  name_contains: "Scarlett 2i2"
+  name_contains: "Scarlett"
+  host_api_contains: "JACK"
   minimum_input_channels: 2
   minimum_output_channels: 2
 

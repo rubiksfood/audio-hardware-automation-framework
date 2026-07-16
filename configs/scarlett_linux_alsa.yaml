@@ -1,5 +1,6 @@
 device:
   name_contains: "Scarlett"
+  host_api_contains: "ALSA"
   minimum_input_channels: 2
   minimum_output_channels: 2
 

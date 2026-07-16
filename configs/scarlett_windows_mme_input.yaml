@@ -1,0 +1,12 @@
+device:
+  name_contains: "Focusrite USB Audio"
+  host_api_contains: "MME"
+  minimum_input_channels: 2
+  minimum_output_channels: 0
+
+stream:
+  sample_rate: 48000
+  input_channels: 2
+  output_channels: 0
+  block_size: null
+  dtype: "float32"

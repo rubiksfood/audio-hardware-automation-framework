@@ -1,0 +1,12 @@
+device:
+  name_contains: "alsa_output.usb-Focusrite_Scarlett"
+  host_api_contains: "PulseAudio"
+  minimum_input_channels: 0
+  minimum_output_channels: 2
+
+stream:
+  sample_rate: 48000
+  input_channels: 0
+  output_channels: 2
+  block_size: null
+  dtype: float32
