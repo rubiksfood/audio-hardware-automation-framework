@@ -9,9 +9,9 @@ from audio_hw_framework.configuration.loader import (
 
 
 def test_load_config() -> None:
-    config = load_config(Path("configs/scarlett_2i2.yaml"))
+    config = load_config(Path("configs/example_duplex_device.yaml"))
 
-    assert config.device.name_contains == "Scarlett 2i2"
+    assert config.device.name_contains == "Scarlett"
 
     assert config.stream.sample_rate == 48000
 
