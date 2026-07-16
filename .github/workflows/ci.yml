@@ -21,6 +21,9 @@ jobs:
           python-version: "3.13"
           cache: pip
 
+      - name: Install PortAudio
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+
       - name: Install project
         run: python -m pip install -e ".[dev]"
 
@@ -34,4 +37,4 @@ jobs:
         run: mypy
 
       - name: Run tests
-        run: pytest --cov=audio_hw_framework --cov-report=term-missing
+        run: pytest

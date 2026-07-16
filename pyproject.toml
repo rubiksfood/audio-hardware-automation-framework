@@ -40,10 +40,14 @@ packages = ["src/audio_hw_framework"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
 addopts = [
-    "--strict-config",
-    "--strict-markers",
     "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=audio_hw_framework",
+    "--cov-report=term-missing",
 ]
 
 markers = [
