@@ -1,5 +1,5 @@
 device:
-  name_contains: "Focusrite USB Audio"
+  name_contains: "Focusrite USB"
   host_api_contains: "MME"
   minimum_input_channels: 2
   minimum_output_channels: 0
