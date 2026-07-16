@@ -50,6 +50,7 @@ class DeviceMatchConfig(BaseModel):
     exact_name: str | None = None
     name_contains: str | None = None
     name_regex: str | None = None
+    host_api_contains: str | None = None
 
     minimum_input_channels: int = Field(default=0, ge=0)
     minimum_output_channels: int = Field(default=0, ge=0)

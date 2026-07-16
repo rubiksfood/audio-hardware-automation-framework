@@ -32,6 +32,12 @@ def device_matches(
     if device.max_output_channels < config.minimum_output_channels:
         return False
 
+    if (
+        config.host_api_contains
+        and config.host_api_contains.casefold() not in device.host_api_name.casefold()
+    ):
+        return False
+
     return True
 
 

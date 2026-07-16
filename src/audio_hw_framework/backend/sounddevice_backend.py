@@ -20,18 +20,21 @@ class SoundDeviceBackend(AudioBackend):
     def list_devices(self) -> list[AudioDevice]:
         try:
             raw_devices = sd.query_devices()
+            raw_host_apis = sd.query_hostapis()
         except sd.PortAudioError as exc:
             raise DeviceEnumerationError(f"Could not enumerate devices: {exc}") from exc
 
         devices: list[AudioDevice] = []
 
         for index, device in enumerate(raw_devices):
+            host_api_index = int(device["hostapi"])
+
             devices.append(
                 AudioDevice(
                     index=index,
                     name=device["name"],
-                    host_api_index=device["hostapi"],
-                    host_api_name="Unknown",
+                    host_api_index=host_api_index,
+                    host_api_name=str(raw_host_apis[host_api_index]["name"]),
                     max_input_channels=device["max_input_channels"],
                     max_output_channels=device["max_output_channels"],
                     default_sample_rate=device["default_samplerate"],
