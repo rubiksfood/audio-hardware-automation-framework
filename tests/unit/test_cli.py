@@ -203,3 +203,53 @@ def test_inspect_devices_handles_backend_error(monkeypatch: MonkeyPatch) -> None
 
     assert result.exit_code == 2
     assert "PortAudio failure" in result.stderr
+
+
+def test_inspect_devices_no_devices_table_output(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    def fake_list_devices(
+        self: SoundDeviceBackend,
+    ) -> list[AudioDevice]:
+        return []
+
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "list_devices",
+        fake_list_devices,
+    )
+
+    result = runner.invoke(
+        app,
+        ["inspect-devices"],
+    )
+
+    assert result.exit_code == 1
+    assert "No audio devices detected." in result.stdout
+
+
+def test_inspect_devices_no_devices_json_output(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    def fake_list_devices(
+        self: SoundDeviceBackend,
+    ) -> list[AudioDevice]:
+        return []
+
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "list_devices",
+        fake_list_devices,
+    )
+
+    result = runner.invoke(
+        app,
+        ["inspect-devices", "--json"],
+    )
+
+    assert result.exit_code == 0
+
+    payload = json.loads(result.stdout)
+
+    assert payload["devices"] == []
+    assert payload["backend"]["name"] == "portaudio"
