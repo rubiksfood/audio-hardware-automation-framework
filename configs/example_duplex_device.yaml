@@ -1,0 +1,11 @@
+device:
+  name_contains: "Scarlett"
+  minimum_input_channels: 2
+  minimum_output_channels: 2
+
+stream:
+  sample_rate: 48000
+  input_channels: 2
+  output_channels: 2
+  block_size: null
+  dtype: float32
