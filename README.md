@@ -180,7 +180,13 @@ audio-hardware-automation-framework/
 │
 ├── docs/
 │   ├── discovery.md
-│   └── platform-support.md
+│   ├── platform-support.md
+│   └── images/
+│       ├── windows-device-discovery.png
+│       ├── linux-device-discovery.png
+│       ├── github-actions-passing.png
+│       ├── pytest-coverage.png
+│       └── wdmks-hotplug-verification.png
 │
 ├── src/
 │   └── audio_hw_framework/
@@ -395,6 +401,28 @@ Explains:
 - Host APIs
 - CI limitations
 - Hardware validation scope
+
+## Evidence
+
+### Windows device discovery
+
+![Windows device discovery](docs/images/windows-device-discovery.png)
+
+### Linux device discovery
+
+![Linux device discovery](docs/images/linux-device-discovery.png)
+
+### GitHub Actions
+
+![GitHub Actions passing](docs/images/github-actions-passing.png)
+
+### pytest coverage
+
+![pytest coverage](docs/images/pytest-coverage.png)
+
+### WDM-KS hotplug verification
+
+![WDM-KS hotplug verification](docs/images/wdmks-hotplug-verification.png)
 
 ---
 
