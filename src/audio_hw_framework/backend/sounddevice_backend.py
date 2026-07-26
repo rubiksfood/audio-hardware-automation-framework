@@ -4,6 +4,7 @@ from audio_hw_framework.backend.base import (
     AudioBackend,
     BackendInfo,
     DeviceEnumerationError,
+    StreamCapabilityError,
 )
 from audio_hw_framework.device.models import AudioDevice, StreamConfig
 
@@ -40,6 +41,7 @@ class SoundDeviceBackend(AudioBackend):
                     default_sample_rate=device["default_samplerate"],
                 )
             )
+
         return devices
 
     def validate_stream_capability(
@@ -47,4 +49,30 @@ class SoundDeviceBackend(AudioBackend):
         device: AudioDevice,
         config: StreamConfig,
     ) -> None:
-        raise NotImplementedError("PortAudio stream capability validation is not implemented")
+        if config.input_channels > 0:
+            try:
+                sd.check_input_settings(
+                    device=device.index,
+                    channels=config.input_channels,
+                    samplerate=config.sample_rate,
+                    dtype=config.dtype.value,
+                )
+            except sd.PortAudioError as exc:
+                raise StreamCapabilityError(
+                    "Input stream settings are not supported "
+                    f"for device index {device.index}: {exc}"
+                ) from exc
+
+        if config.output_channels > 0:
+            try:
+                sd.check_output_settings(
+                    device=device.index,
+                    channels=config.output_channels,
+                    samplerate=config.sample_rate,
+                    dtype=config.dtype.value,
+                )
+            except sd.PortAudioError as exc:
+                raise StreamCapabilityError(
+                    "Output stream settings are not supported "
+                    f"for device index {device.index}: {exc}"
+                ) from exc
