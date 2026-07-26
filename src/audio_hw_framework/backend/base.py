@@ -25,6 +25,10 @@ class StreamCapabilityError(AudioBackendError):
     """The requested stream configuration is not supported."""
 
 
+class StreamOpenError(AudioBackendError):
+    """The requested audio stream could not be opened."""
+
+
 class AudioBackend(ABC):
     """Interface implemented by audio backend adapters."""
 
@@ -44,3 +48,11 @@ class AudioBackend(ABC):
         config: StreamConfig,
     ) -> None:
         """Validate whether a device supports the requested stream settings."""
+
+    @abstractmethod
+    def validate_stream_opening(
+        self,
+        device: AudioDevice,
+        config: StreamConfig,
+    ) -> None:
+        """Open and close the requested stream to verify it can be created."""
