@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from audio_hw_framework.device.models import AudioDevice
+from audio_hw_framework.device.models import AudioDevice, StreamConfig
 
 
 @dataclass(frozen=True)
 class BackendInfo:
+    """Metadata describing an audio backend."""
+
     name: str
     library: str
     library_version: str | None
@@ -19,7 +21,13 @@ class DeviceEnumerationError(AudioBackendError):
     """Device discovery failed."""
 
 
+class StreamCapabilityError(AudioBackendError):
+    """The requested stream configuration is not supported."""
+
+
 class AudioBackend(ABC):
+    """Interface implemented by audio backend adapters."""
+
     @property
     @abstractmethod
     def info(self) -> BackendInfo:
@@ -28,3 +36,11 @@ class AudioBackend(ABC):
     @abstractmethod
     def list_devices(self) -> list[AudioDevice]:
         """Return visible audio devices."""
+
+    @abstractmethod
+    def validate_stream_capability(
+        self,
+        device: AudioDevice,
+        config: StreamConfig,
+    ) -> None:
+        """Validate whether a device supports the requested stream settings."""

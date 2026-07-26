@@ -5,7 +5,7 @@ from audio_hw_framework.backend.base import (
     BackendInfo,
     DeviceEnumerationError,
 )
-from audio_hw_framework.device.models import AudioDevice
+from audio_hw_framework.device.models import AudioDevice, StreamConfig
 
 
 class SoundDeviceBackend(AudioBackend):
@@ -41,3 +41,10 @@ class SoundDeviceBackend(AudioBackend):
                 )
             )
         return devices
+
+    def validate_stream_capability(
+        self,
+        device: AudioDevice,
+        config: StreamConfig,
+    ) -> None:
+        raise NotImplementedError("PortAudio stream capability validation is not implemented")
