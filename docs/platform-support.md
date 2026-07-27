@@ -201,8 +201,7 @@ Example:
 
 ```python
 @pytest.mark.hardware
-def test_loopback_recording() -> None:
-    ...
+def test_loopback_recording() -> None: ...
 ```
 
 This allows CI pipelines to execute deterministic tests while reserving hardware validation for dedicated test environments.
