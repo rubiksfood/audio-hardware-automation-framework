@@ -225,11 +225,11 @@ audio-hardware-automation-framework/
 │   ├── platform-support.md
 │   ├── stream-validation.md
 │   └── images/
-│       ├── windows-device-discovery.png
-│       ├── linux-device-discovery.png
-│       ├── github-actions-passing.png
-│       ├── pytest-coverage.png
-│       ├── wdmks-hotplug-verification.png
+│       ├── phase-1-github-actions-passing.png
+│       ├── phase-1-linux-device-discovery.png
+│       ├── phase-1-pytest-coverage.png
+│       ├── phase-1-wdmks-hotplug-verification.png
+│       ├── phase-1-windows-device-discovery.png
 │       ├── phase-2-linux-duplex-validation.png
 │       ├── phase-2-negative-validation.png
 │       └── phase-2-stream-validation.png
@@ -478,23 +478,23 @@ Explains:
 
 ### Windows device discovery
 
-![Windows device discovery](docs/images/windows-device-discovery.png)
+![Windows device discovery](docs/images/phase-1-windows-device-discovery.png)
 
 ### Linux device discovery
 
-![Linux device discovery](docs/images/linux-device-discovery.png)
+![Linux device discovery](docs/images/phase-1-linux-device-discovery.png)
 
 ### GitHub Actions
 
-![GitHub Actions passing](docs/images/github-actions-passing.png)
+![GitHub Actions passing](docs/images/phase-1-github-actions-passing.png)
 
 ### pytest coverage
 
-![pytest coverage](docs/images/pytest-coverage.png)
+![pytest coverage](docs/images/phase-1-pytest-coverage.png)
 
 ### WDM-KS hotplug verification
 
-![WDM-KS hotplug verification](docs/images/wdmks-hotplug-verification.png)
+![WDM-KS hotplug verification](docs/images/phase-1-wdmks-hotplug-verification.png)
 
 ---
 
