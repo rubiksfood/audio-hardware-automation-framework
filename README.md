@@ -16,9 +16,9 @@ The framework aims to provide a reusable foundation for automated testing of aud
 - Audio drivers
 - Recording and playback systems
 
-The initial focus is on reliable device discovery, configuration management, and hardware identification.
+The current focus is reliable device discovery, configuration management, hardware identification, stream-capability validation, and safe stream-opening checks.
 
-Future releases will add automated validation capabilities including playback, recording, loopback testing, sample-rate verification, and stability testing.
+Future releases will add playback, recording, loopback testing, measured sample-rate verification, audio quality analysis, latency observation, and stability testing.
 
 ---
 
@@ -89,6 +89,44 @@ Output JSON:
 audio-hw inspect-devices --json
 ```
 
+Validate a configured stream:
+
+```bash
+audio-hw validate-stream --config configs/example_duplex_device.yaml
+```
+
+Output validation results as JSON:
+
+```bash
+audio-hw validate-stream \
+  --config configs/example_duplex_device.yaml \
+  --json
+```
+
+The validation command requires exactly one matching device. It checks whether PortAudio accepts the requested stream settings and whether the requested stream can be constructed and closed safely.
+
+---
+
+### Stream Validation
+
+Configuration-driven validation supports:
+
+- Input-only streams
+- Output-only streams
+- Duplex streams
+- Sample-rate capability checks
+- Input and output channel checks
+- Strongly typed sample formats
+- Configurable or backend-selected block sizes
+- Safe stream construction and closure
+- Human-readable and JSON results
+
+Validation is implemented through a backend-independent application service. This separates workflow orchestration from PortAudio-specific behaviour and allows deterministic hardware-independent testing.
+
+A successful stream-opening result does not start recording or playback and does not yet prove end-to-end audio signal quality.
+
+See [`docs/stream-validation.md`](docs/stream-validation.md) for validation scope, limitations, exit codes and the hardware test procedure.
+
 ---
 
 ### Structured Device Models
@@ -123,6 +161,9 @@ The project includes:
 - Device matching tests
 - Configuration validation tests
 - Backend abstraction tests
+- PortAudio capability-validation tests
+- Stream-opening tests
+- Validation-service orchestration tests
 - CLI tests
 
 GitHub Actions runs hardware-independent tests, linting, formatting checks, type checking, and coverage reporting on Ubuntu.
@@ -181,12 +222,16 @@ audio-hardware-automation-framework/
 ├── docs/
 │   ├── discovery.md
 │   ├── platform-support.md
+│   ├── stream-validation.md
 │   └── images/
 │       ├── windows-device-discovery.png
 │       ├── linux-device-discovery.png
 │       ├── github-actions-passing.png
 │       ├── pytest-coverage.png
-│       └── wdmks-hotplug-verification.png
+│       ├── wdmks-hotplug-verification.png
+│       ├── phase-2-linux-duplex-validation.png
+│       ├── phase-2-negative-validation.png
+│       └── phase-2-stream-validation.png
 │
 ├── src/
 │   └── audio_hw_framework/
@@ -205,6 +250,10 @@ audio-hardware-automation-framework/
 │       │   ├── matcher.py
 │       │   └── models.py
 │       │
+│       ├── validation/
+│       │   ├── __init__.py
+│       │   └── service.py
+│       │
 │       ├── __init__.py
 │       ├── __main__.py
 │       └── cli.py
@@ -217,7 +266,8 @@ audio-hardware-automation-framework/
 │       ├── test_device_matching.py
 │       ├── test_models.py
 │       ├── test_package.py
-│       └── test_sounddevice_backend.py
+│       ├── test_sounddevice_backend.py
+│       └── test_validation_service.py
 │
 ├── pyproject.toml
 ├── README.md
@@ -341,7 +391,7 @@ device:
 stream:
   sample_rate: 48000
   input_channels: 2
-  output_channels: 2
+  output_channels: 0
   block_size: null
   dtype: "float32"
 ```
@@ -364,6 +414,12 @@ Current validation:
 - Windows host API validation (MME, DirectSound, WASAPI, WDM-KS)
 - Linux host API validation (ALSA, JACK, PulseAudio)
 - Audio-stack-specific device matching
+- Configuration-driven unique device selection
+- PortAudio input/output capability validation
+- Input-only, output-only or duplex stream construction
+- Configured block-size application during stream construction
+- Safe stream closure without recording or playback
+- Structured CLI and JSON validation reporting
 
 Platforms tested:
 
@@ -402,6 +458,21 @@ Explains:
 - CI limitations
 - Hardware validation scope
 
+### Stream Validation
+
+```text
+docs/stream-validation.md
+```
+
+Explains:
+
+* Validation workflow
+* Supported stream directions
+* CLI and JSON output
+* Exit codes
+* Validation scope and limitations
+* Focusrite hardware-validation procedure
+
 ## Evidence
 
 ### Windows device discovery
@@ -435,27 +506,37 @@ Explains:
 - Audio backend abstraction
 - PortAudio device enumeration
 - Configuration-driven device matching
-- CLI device inspection
-- Comprehensive unit testing
-- Discovery documentation
-- Platform support documentation
 - Host API discovery
 - Host API-aware device matching
+- CLI device inspection
+- JSON device inspection
+- Unique configured-device selection
+- PortAudio stream-capability validation
+- Input-only, output-only and duplex validation
+- Stream construction and safe closure
+- Configuration-driven validation service
+- `validate-stream` CLI command
+- Structured validation JSON output
+- Comprehensive unit testing
+- GitHub Actions CI pipeline
+- Discovery documentation
+- Platform-support documentation
+- Stream-validation documentation
 
 ### Planned
 
-- Device selection validation
-- Stream opening validation
-- Sample-rate verification
-- Buffer-size verification
 - Recording validation
 - Playback validation
-- Loopback testing
+- Loopback signal testing
+- Measured sample-rate verification
+- Effective buffer-size observation
+- Silence detection
+- Peak and clipping analysis
+- Dropout and underrun detection
 - Disconnect/reconnect testing
 - Long-duration stability testing
-- Latency observation
-- Hardware integration tests
-- GitHub Actions CI pipeline
+- Latency observation and measurement
+- Hardware integration test markers and execution workflow
 
 ---
 
@@ -490,6 +571,12 @@ This project demonstrates:
 - Structured logging and reporting preparation
 - Python QA tooling
 - Automated validation framework development
+- Layered application architecture
+- Backend-independent workflow orchestration
+- Framework-owned exception translation
+- Deterministic test doubles
+- Stream lifecycle validation
+- Human-readable and machine-readable reporting
 
 ---
 
