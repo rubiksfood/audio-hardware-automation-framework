@@ -216,7 +216,8 @@ audio-hardware-automation-framework/
 │   │
 │   ├── scarlett_linux_jack.yaml
 │   │
-│   ├── scarlett_linux_pulseaudio_input.yaml
+│   ├── scarlett_linux_pulseaudio_input1.yaml
+│   ├── scarlett_linux_pulseaudio_input2.yaml
 │   └── scarlett_linux_pulseaudio_output.yaml
 │
 ├── docs/
