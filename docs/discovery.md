@@ -181,17 +181,17 @@ Currently implemented:
 - Device matching
 - CLI device inspection
 - JSON reporting
+- Unique configured-device selection
+- Stream capability validation
+- Stream construction and safe closure
 
 Not yet implemented:
 
-- Playback validation
-- Recording validation
-- Loopback testing
-- Sample-rate testing
-- Buffer-size testing
-- Latency measurement
-- Stability testing
-- Driver validation
+- Actual recording
+- Actual playback
+- Measured sample-rate verification
+- Effective runtime buffer-size measurement
+- Loopback, latency and stability testing
 
 ---
 
@@ -201,4 +201,4 @@ Device discovery means that the framework can locate a device that matches the s
 
 It does not mean that the device functions correctly.
 
-Functional validation will be added in future releases.
+Stream capability and opening validation are implemented. Recording, playback and signal-path validation remain planned.

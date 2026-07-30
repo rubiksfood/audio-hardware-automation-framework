@@ -126,14 +126,14 @@ Currently implemented:
 - Device matching
 - CLI device inspection
 - JSON device reporting
+- Sample-rate capability validation before stream construction
+- Configured block-size validation before stream construction
 
 Not yet implemented:
 
 - Audio playback
 - Audio recording
 - Loopback testing
-- Sample-rate validation
-- Buffer-size validation
 - Latency measurement
 - Long-duration stability testing
 - Driver validation
@@ -150,6 +150,8 @@ Validated areas:
 - Device matching
 - CLI inspection
 - Cross-platform enumeration
+- Windows WASAPI stream validation
+- Linux ALSA duplex validation
 
 Operating systems tested:
 
@@ -258,7 +260,7 @@ Observed values for the same Scarlett 2i2:
 
 These differences likely reflect operating-system and audio-subsystem configuration rather than hardware limitations.
 
-Future framework versions will include explicit sample-rate capability validation.
+Future framework versions will add measured sample-rate verification across the complete audio signal path.
 
 ---
 

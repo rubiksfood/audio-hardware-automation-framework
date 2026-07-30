@@ -195,9 +195,7 @@ A successful result does not yet prove:
 
 Those behaviours require later recording, playback, loopback, measurement and stability phases.
 
-## Hardware Validation Procedure
-
-The following procedure should be run with the real audio interface connected.
+## Reproducing Hardware Validation
 
 ### Preparation
 
@@ -272,8 +270,6 @@ Confirm that:
 * The command exits with code `2`.
 * The error reports that no device matched.
 * No stream capability or opening validation is attempted.
-
-Do not commit a temporary negative-test configuration unless it is intentionally retained as a documented test fixture.
 
 ## Phase 2 Hardware Validation Record
 
