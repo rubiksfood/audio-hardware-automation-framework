@@ -1,5 +1,7 @@
 # Audio Hardware Automation Framework
 
+[![CI](https://github.com/rubiksfood/audio-hardware-automation-framework/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rubiksfood/audio-hardware-automation-framework/actions/workflows/ci.yml)
+
 A Python-based framework for automated audio hardware testing and validation.
 
 This project demonstrates QA automation, hardware testing, configuration-driven validation, CI-friendly test design, and cross-platform audio device discovery. It is being developed as a portfolio project targeting Audio QA Engineer, Hardware QA Engineer, Embedded QA Engineer, and Software QA Engineer roles within the audio technology industry.
