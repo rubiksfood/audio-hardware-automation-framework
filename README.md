@@ -6,6 +6,26 @@ This project demonstrates QA automation, hardware testing, configuration-driven 
 
 ---
 
+## Project Status
+
+**Phase 2 complete — configuration-driven stream validation**
+
+Completed capabilities include:
+
+- Cross-platform audio device discovery
+- Host API-aware device matching
+- Input-only, output-only, and duplex stream validation
+- PortAudio capability checks
+- Safe stream construction and closure
+- Rich CLI and structured JSON reporting
+- Windows and Linux hardware validation
+
+**Current development:** Phase 3 — recording and playback foundations.
+
+See the [Roadmap](#roadmap) for planned development.
+
+---
+
 ## Project Goals
 
 The framework aims to provide a reusable foundation for automated testing of audio hardware such as:
@@ -500,44 +520,47 @@ Explains:
 
 ## Roadmap
 
-### Completed
+### Phase 1 — Device discovery and configuration
 
-- Python project setup
-- Typed configuration models
-- Audio backend abstraction
+**Complete**
+
+- Backend abstraction
 - PortAudio device enumeration
-- Configuration-driven device matching
-- Host API discovery
+- Typed YAML configuration
 - Host API-aware device matching
-- CLI device inspection
-- JSON device inspection
-- Unique configured-device selection
-- PortAudio stream-capability validation
-- Input-only, output-only and duplex validation
+- Rich and JSON device inspection
+- Cross-platform hardware discovery
+
+### Phase 2 — Stream capability and opening validation
+
+**Complete**
+
+- Strongly typed stream configuration
+- Input-only, output-only, and duplex validation
+- PortAudio capability checks
 - Stream construction and safe closure
-- Configuration-driven validation service
+- Validation orchestration service
 - `validate-stream` CLI command
-- Structured validation JSON output
-- Comprehensive unit testing
-- GitHub Actions CI pipeline
-- Discovery documentation
-- Platform-support documentation
-- Stream-validation documentation
+- Structured validation reporting
+- Windows and Linux hardware validation
 
-### Planned
+### Phase 3 — Recording and playback foundations
 
-- Recording validation
-- Playback validation
-- Loopback signal testing
-- Measured sample-rate verification
-- Effective buffer-size observation
-- Silence detection
-- Peak and clipping analysis
-- Dropout and underrun detection
-- Disconnect/reconnect testing
-- Long-duration stability testing
-- Latency observation and measurement
-- Hardware integration test markers and execution workflow
+**Planned**
+
+- Finite-duration recording
+- Finite-duration playback
+- Audio buffer result models
+- WAV import and export
+- Execution services and CLI commands
+
+### Later phases
+
+- Signal generation and analysis
+- Loopback validation
+- Latency and stream-health measurement
+- Stability and recovery testing
+- Validation profiles and report generation
 
 ---
 
