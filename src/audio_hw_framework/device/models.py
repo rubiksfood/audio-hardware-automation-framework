@@ -1,8 +1,9 @@
 """Typed models representing audio host APIs, devices and stream settings."""
 
 from enum import StrEnum
+from typing import Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class DeviceDirection(StrEnum):
@@ -12,6 +13,16 @@ class DeviceDirection(StrEnum):
     OUTPUT = "output"
     DUPLEX = "duplex"
     NONE = "none"
+
+
+class SampleDType(StrEnum):
+    """Sample formats supported by standard sounddevice streams."""
+
+    FLOAT32 = "float32"
+    INT32 = "int32"
+    INT16 = "int16"
+    INT8 = "int8"
+    UINT8 = "uint8"
 
 
 class AudioDevice(BaseModel):
@@ -59,14 +70,21 @@ class StreamConfig(BaseModel):
     """Returns the configuration settings in a single stream."""
 
     sample_rate: int = Field(default=48000, gt=0)
-
     input_channels: int = Field(default=2, ge=0)
-
     output_channels: int = Field(default=2, ge=0)
+    block_size: int | None = Field(default=None, gt=0)
+    dtype: SampleDType = SampleDType.FLOAT32
 
-    block_size: int | None = None
+    @model_validator(mode="after")
+    def validate_active_direction(self) -> Self:
+        """Require at least one active stream direction."""
 
-    dtype: str = "float32"
+        if self.input_channels == 0 and self.output_channels == 0:
+            raise ValueError(
+                "At least one of input_channels or output_channels must be greater than 0"
+            )
+
+        return self
 
 
 class FrameworkConfig(BaseModel):

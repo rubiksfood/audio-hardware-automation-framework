@@ -25,7 +25,7 @@ dev = [
     "pre-commit",
     "pytest",
     "pytest-cov",
-    "ruff",
+    "ruff==0.15.21",
     "types-PyYAML",
 ]
 
@@ -57,9 +57,14 @@ markers = [
 ]
 
 [tool.ruff]
+required-version = "==0.15.21"
 target-version = "py313"
 line-length = 100
 src = ["src", "tests"]
+
+
+[tool.ruff.format]
+preview = true
 
 
 [tool.ruff.lint]

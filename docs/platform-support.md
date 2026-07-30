@@ -201,8 +201,7 @@ Example:
 
 ```python
 @pytest.mark.hardware
-def test_loopback_recording() -> None:
-    ...
+def test_loopback_recording() -> None: ...
 ```
 
 This allows CI pipelines to execute deterministic tests while reserving hardware validation for dedicated test environments.
@@ -273,16 +272,23 @@ Instead, separate logical endpoints were presented for:
 - Capture
 - Monitor sources
 
+Two separate capture endpoints were exposed, one for each input.
+
 Examples:
 
 ```text
 alsa_output.usb-Focusrite_Scarlett_2i2_USB...
-alsa_input.usb-Focusrite_Scarlett_2i2_USB...
+alsa_input.usb-Focusrite_Scarlett_2i2_USB...Mic1...
+alsa_input.usb-Focusrite_Scarlett_2i2_USB...Mic2...
 ```
 
-Separate framework configuration files are therefore provided for PulseAudio input and output testing.
+Separate framework configuration files are therefore provided for:
 
-This behaviour differs from ALSA and JACK, which exposed duplex devices.
+- PulseAudio output validation
+- PulseAudio input 1 validation
+- PulseAudio input 2 validation
+
+This behaviour differs from ALSA and JACK, which exposed the interface as a duplex device.
 
 ---
 

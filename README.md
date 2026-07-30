@@ -6,6 +6,26 @@ This project demonstrates QA automation, hardware testing, configuration-driven 
 
 ---
 
+## Project Status
+
+**Phase 2 complete — configuration-driven stream validation**
+
+Completed capabilities include:
+
+- Cross-platform audio device discovery
+- Host API-aware device matching
+- Input-only, output-only, and duplex stream validation
+- PortAudio capability checks
+- Safe stream construction and closure
+- Rich CLI and structured JSON reporting
+- Windows and Linux hardware validation
+
+**Current development:** Phase 3 — recording and playback foundations.
+
+See the [Roadmap](#roadmap) for planned development.
+
+---
+
 ## Project Goals
 
 The framework aims to provide a reusable foundation for automated testing of audio hardware such as:
@@ -16,9 +36,9 @@ The framework aims to provide a reusable foundation for automated testing of aud
 - Audio drivers
 - Recording and playback systems
 
-The initial focus is on reliable device discovery, configuration management, and hardware identification.
+The current focus is reliable device discovery, configuration management, hardware identification, stream-capability validation, and safe stream-opening checks.
 
-Future releases will add automated validation capabilities including playback, recording, loopback testing, sample-rate verification, and stability testing.
+Future releases will add playback, recording, loopback testing, measured sample-rate verification, audio quality analysis, latency observation, and stability testing.
 
 ---
 
@@ -89,6 +109,44 @@ Output JSON:
 audio-hw inspect-devices --json
 ```
 
+Validate a configured stream:
+
+```bash
+audio-hw validate-stream --config configs/example_duplex_device.yaml
+```
+
+Output validation results as JSON:
+
+```bash
+audio-hw validate-stream \
+  --config configs/example_duplex_device.yaml \
+  --json
+```
+
+The validation command requires exactly one matching device. It checks whether PortAudio accepts the requested stream settings and whether the requested stream can be constructed and closed safely.
+
+---
+
+### Stream Validation
+
+Configuration-driven validation supports:
+
+- Input-only streams
+- Output-only streams
+- Duplex streams
+- Sample-rate capability checks
+- Input and output channel checks
+- Strongly typed sample formats
+- Configurable or backend-selected block sizes
+- Safe stream construction and closure
+- Human-readable and JSON results
+
+Validation is implemented through a backend-independent application service. This separates workflow orchestration from PortAudio-specific behaviour and allows deterministic hardware-independent testing.
+
+A successful stream-opening result does not start recording or playback and does not yet prove end-to-end audio signal quality.
+
+See [`docs/stream-validation.md`](docs/stream-validation.md) for validation scope, limitations, exit codes and the hardware test procedure.
+
 ---
 
 ### Structured Device Models
@@ -123,6 +181,9 @@ The project includes:
 - Device matching tests
 - Configuration validation tests
 - Backend abstraction tests
+- PortAudio capability-validation tests
+- Stream-opening tests
+- Validation-service orchestration tests
 - CLI tests
 
 GitHub Actions runs hardware-independent tests, linting, formatting checks, type checking, and coverage reporting on Ubuntu.
@@ -175,18 +236,23 @@ audio-hardware-automation-framework/
 │   │
 │   ├── scarlett_linux_jack.yaml
 │   │
-│   ├── scarlett_linux_pulseaudio_input.yaml
+│   ├── scarlett_linux_pulseaudio_input1.yaml
+│   ├── scarlett_linux_pulseaudio_input2.yaml
 │   └── scarlett_linux_pulseaudio_output.yaml
 │
 ├── docs/
 │   ├── discovery.md
 │   ├── platform-support.md
+│   ├── stream-validation.md
 │   └── images/
-│       ├── windows-device-discovery.png
-│       ├── linux-device-discovery.png
-│       ├── github-actions-passing.png
-│       ├── pytest-coverage.png
-│       └── wdmks-hotplug-verification.png
+│       ├── phase-1-github-actions-passing.png
+│       ├── phase-1-linux-device-discovery.png
+│       ├── phase-1-pytest-coverage.png
+│       ├── phase-1-wdmks-hotplug-verification.png
+│       ├── phase-1-windows-device-discovery.png
+│       ├── phase-2-linux-duplex-validation.png
+│       ├── phase-2-negative-validation.png
+│       └── phase-2-stream-validation.png
 │
 ├── src/
 │   └── audio_hw_framework/
@@ -205,6 +271,10 @@ audio-hardware-automation-framework/
 │       │   ├── matcher.py
 │       │   └── models.py
 │       │
+│       ├── validation/
+│       │   ├── __init__.py
+│       │   └── service.py
+│       │
 │       ├── __init__.py
 │       ├── __main__.py
 │       └── cli.py
@@ -217,7 +287,8 @@ audio-hardware-automation-framework/
 │       ├── test_device_matching.py
 │       ├── test_models.py
 │       ├── test_package.py
-│       └── test_sounddevice_backend.py
+│       ├── test_sounddevice_backend.py
+│       └── test_validation_service.py
 │
 ├── pyproject.toml
 ├── README.md
@@ -341,7 +412,7 @@ device:
 stream:
   sample_rate: 48000
   input_channels: 2
-  output_channels: 2
+  output_channels: 0
   block_size: null
   dtype: "float32"
 ```
@@ -364,6 +435,12 @@ Current validation:
 - Windows host API validation (MME, DirectSound, WASAPI, WDM-KS)
 - Linux host API validation (ALSA, JACK, PulseAudio)
 - Audio-stack-specific device matching
+- Configuration-driven unique device selection
+- PortAudio input/output capability validation
+- Input-only, output-only or duplex stream construction
+- Configured block-size application during stream construction
+- Safe stream closure without recording or playback
+- Structured CLI and JSON validation reporting
 
 Platforms tested:
 
@@ -402,60 +479,88 @@ Explains:
 - CI limitations
 - Hardware validation scope
 
+### Stream Validation
+
+```text
+docs/stream-validation.md
+```
+
+Explains:
+
+* Validation workflow
+* Supported stream directions
+* CLI and JSON output
+* Exit codes
+* Validation scope and limitations
+* Focusrite hardware-validation procedure
+
 ## Evidence
 
 ### Windows device discovery
 
-![Windows device discovery](docs/images/windows-device-discovery.png)
+![Windows device discovery](docs/images/phase-1-windows-device-discovery.png)
 
 ### Linux device discovery
 
-![Linux device discovery](docs/images/linux-device-discovery.png)
+![Linux device discovery](docs/images/phase-1-linux-device-discovery.png)
 
 ### GitHub Actions
 
-![GitHub Actions passing](docs/images/github-actions-passing.png)
+![GitHub Actions passing](docs/images/phase-1-github-actions-passing.png)
 
 ### pytest coverage
 
-![pytest coverage](docs/images/pytest-coverage.png)
+![pytest coverage](docs/images/phase-1-pytest-coverage.png)
 
 ### WDM-KS hotplug verification
 
-![WDM-KS hotplug verification](docs/images/wdmks-hotplug-verification.png)
+![WDM-KS hotplug verification](docs/images/phase-1-wdmks-hotplug-verification.png)
 
 ---
 
 ## Roadmap
 
-### Completed
+### Phase 1 — Device discovery and configuration
 
-- Python project setup
-- Typed configuration models
-- Audio backend abstraction
+**Complete**
+
+- Backend abstraction
 - PortAudio device enumeration
-- Configuration-driven device matching
-- CLI device inspection
-- Comprehensive unit testing
-- Discovery documentation
-- Platform support documentation
-- Host API discovery
+- Typed YAML configuration
 - Host API-aware device matching
+- Rich and JSON device inspection
+- Cross-platform hardware discovery
 
-### Planned
+### Phase 2 — Stream capability and opening validation
 
-- Device selection validation
-- Stream opening validation
-- Sample-rate verification
-- Buffer-size verification
-- Recording validation
-- Playback validation
-- Loopback testing
-- Disconnect/reconnect testing
-- Long-duration stability testing
-- Latency observation
-- Hardware integration tests
-- GitHub Actions CI pipeline
+**Complete**
+
+- Strongly typed stream configuration
+- Input-only, output-only, and duplex validation
+- PortAudio capability checks
+- Stream construction and safe closure
+- Validation orchestration service
+- `validate-stream` CLI command
+- Structured validation reporting
+- Windows and Linux hardware validation
+
+### Phase 3 — Recording and playback foundations
+
+**Planned**
+
+- Finite-duration recording
+- Finite-duration playback
+- Audio buffer result models
+- WAV import and export
+- Execution services and CLI commands
+
+### Later phases
+
+- Signal generation and analysis
+- Loopback validation
+- Latency and stream-health measurement
+- Stability and recovery testing
+- Validation profiles and report generation
 
 ---
 
@@ -490,6 +595,12 @@ This project demonstrates:
 - Structured logging and reporting preparation
 - Python QA tooling
 - Automated validation framework development
+- Layered application architecture
+- Backend-independent workflow orchestration
+- Framework-owned exception translation
+- Deterministic test doubles
+- Stream lifecycle validation
+- Human-readable and machine-readable reporting
 
 ---
 

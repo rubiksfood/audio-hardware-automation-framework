@@ -1,5 +1,5 @@
 device:
-  name_contains: "alsa_input.usb-Focusrite_Scarlett"
+  name_contains: "alsa_input.usb-Focusrite_Scarlett_2i2_USB_Y82MZ9N9B2921C-00.HiFi__Mic1__source"
   host_api_contains: "PulseAudio"
   minimum_input_channels: 1
   minimum_output_channels: 0
