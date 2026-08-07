@@ -1,6 +1,7 @@
 """Typed models representing audio host APIs, devices and stream settings."""
 
 from enum import StrEnum
+from pathlib import Path
 from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
@@ -87,8 +88,19 @@ class StreamConfig(BaseModel):
         return self
 
 
+class AudioExecutionConfig(BaseModel):
+    """Settings controlling finite audio execution."""
+
+    duration_seconds: float = Field(default=1.0, gt=0)
+    timeout_seconds: float = Field(default=5.0, gt=0)
+    output_file: Path | None = None
+
+
 class FrameworkConfig(BaseModel):
     """Root configuration."""
 
     device: DeviceMatchConfig
     stream: StreamConfig
+    execution: AudioExecutionConfig = Field(
+        default_factory=AudioExecutionConfig,
+    )
