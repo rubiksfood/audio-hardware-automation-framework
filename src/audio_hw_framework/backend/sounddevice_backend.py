@@ -1,7 +1,12 @@
+import time
+
+import numpy as np
 import sounddevice as sd
 
+from audio_hw_framework.audio import AudioBuffer
 from audio_hw_framework.backend.base import (
     AudioBackend,
+    AudioBackendError,
     BackendInfo,
     DeviceEnumerationError,
     StreamCapabilityError,
@@ -126,3 +131,108 @@ class SoundDeviceBackend(AudioBackend):
             ) from exc
 
         stream.close(ignore_errors=True)
+
+    def record(
+        self,
+        device: AudioDevice,
+        config: StreamConfig,
+        *,
+        frame_count: int,
+        timeout_seconds: float,
+    ) -> AudioBuffer:
+        """Record a finite number of frames from a PortAudio input stream."""
+
+        if frame_count < 0:
+            raise ValueError("frame_count must be greater than or equal to 0")
+
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be greater than 0")
+
+        if config.input_channels == 0:
+            raise AudioBackendError(
+                "Cannot record from a stream with no input channels",
+            )
+
+        if frame_count == 0:
+            return AudioBuffer(
+                samples=np.empty(
+                    (0, config.input_channels),
+                    dtype=config.dtype.value,
+                ),
+                sample_rate=config.sample_rate,
+            )
+
+        block_size = config.block_size if config.block_size is not None else 0
+
+        stream = None
+
+        try:
+            stream = sd.InputStream(
+                samplerate=config.sample_rate,
+                blocksize=block_size,
+                device=device.index,
+                channels=config.input_channels,
+                dtype=config.dtype.value,
+            )
+
+            stream.start()
+
+            chunks: list[np.ndarray] = []
+            captured_frames = 0
+            deadline = time.monotonic() + timeout_seconds
+
+            while captured_frames < frame_count:
+                if time.monotonic() >= deadline:
+                    raise AudioBackendError(
+                        f"Recording timed out for device index {device.index}",
+                    )
+
+                available_frames = stream.read_available
+
+                if available_frames == 0:
+                    time.sleep(0.001)
+                    continue
+
+                frames_to_read = min(
+                    available_frames,
+                    frame_count - captured_frames,
+                )
+
+                data, overflowed = stream.read(frames_to_read)
+
+                if overflowed:
+                    raise AudioBackendError(
+                        f"Input overflow while recording from device index {device.index}",
+                    )
+
+                chunks.append(data)
+                captured_frames += len(data)
+
+            stream.stop()
+
+        except sd.PortAudioError as exc:
+            if stream is not None:
+                stream.abort(ignore_errors=True)
+
+            raise AudioBackendError(
+                f"Could not record from device index {device.index}: {exc}",
+            ) from exc
+
+        except AudioBackendError:
+            if stream is not None:
+                stream.abort(ignore_errors=True)
+            raise
+
+        finally:
+            if stream is not None:
+                stream.close(ignore_errors=True)
+
+        samples = np.concatenate(
+            chunks,
+            axis=0,
+        )
+
+        return AudioBuffer(
+            samples=samples,
+            sample_rate=config.sample_rate,
+        )
