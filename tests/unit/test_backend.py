@@ -1,6 +1,9 @@
+import numpy as np
 import pytest
 
+from audio_hw_framework.audio import AudioBuffer
 from audio_hw_framework.backend.base import (
+    BackendOperationNotSupportedError,
     StreamCapabilityError,
     StreamOpenError,
 )
@@ -171,3 +174,50 @@ def test_fake_backend_distinguishes_stream_block_sizes() -> None:
         device,
         accepted_config,
     )
+
+
+def test_fake_backend_reports_recording_as_unsupported() -> None:
+    backend = FakeAudioBackend()
+    device = create_test_device()
+    config = StreamConfig(
+        input_channels=2,
+        output_channels=0,
+    )
+
+    with pytest.raises(
+        BackendOperationNotSupportedError,
+        match="fake backend does not support recording",
+    ):
+        backend.record(
+            device,
+            config,
+            frame_count=48_000,
+            timeout_seconds=5.0,
+        )
+
+
+def test_fake_backend_reports_playback_as_unsupported() -> None:
+    backend = FakeAudioBackend()
+    device = create_test_device()
+    config = StreamConfig(
+        input_channels=0,
+        output_channels=2,
+    )
+    audio = AudioBuffer(
+        samples=np.zeros(
+            (48_000, 2),
+            dtype=np.float32,
+        ),
+        sample_rate=48_000,
+    )
+
+    with pytest.raises(
+        BackendOperationNotSupportedError,
+        match="fake backend does not support playback",
+    ):
+        backend.playback(
+            device,
+            config,
+            audio,
+            timeout_seconds=5.0,
+        )
