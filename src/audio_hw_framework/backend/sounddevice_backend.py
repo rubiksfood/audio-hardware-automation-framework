@@ -236,3 +236,106 @@ class SoundDeviceBackend(AudioBackend):
             samples=samples,
             sample_rate=config.sample_rate,
         )
+
+    def playback(
+        self,
+        device: AudioDevice,
+        config: StreamConfig,
+        audio: AudioBuffer,
+        *,
+        timeout_seconds: float,
+    ) -> None:
+        """Play a finite audio buffer through a PortAudio output stream."""
+
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be greater than 0")
+
+        if config.output_channels == 0:
+            raise AudioBackendError(
+                "Cannot play audio through a stream with no output channels",
+            )
+
+        if audio.sample_rate != config.sample_rate:
+            raise AudioBackendError(
+                "Playback audio sample rate does not match the stream sample rate",
+            )
+
+        if audio.channel_count != config.output_channels:
+            raise AudioBackendError(
+                "Playback audio channel count does not match the stream output channels",
+            )
+
+        if audio.frame_count == 0:
+            return
+
+        block_size = config.block_size if config.block_size is not None else 0
+
+        samples = np.ascontiguousarray(
+            audio.samples,
+            dtype=config.dtype.value,
+        )
+
+        stream = None
+
+        try:
+            stream = sd.OutputStream(
+                samplerate=config.sample_rate,
+                blocksize=block_size,
+                device=device.index,
+                channels=config.output_channels,
+                dtype=config.dtype.value,
+            )
+
+            stream.start()
+
+            written_frames = 0
+            deadline = time.monotonic() + timeout_seconds
+
+            while written_frames < audio.frame_count:
+                if time.monotonic() >= deadline:
+                    raise AudioBackendError(
+                        f"Playback timed out for device index {device.index}",
+                    )
+
+                available_frames = stream.write_available
+
+                if available_frames == 0:
+                    time.sleep(0.001)
+                    continue
+
+                frames_to_write = min(
+                    available_frames,
+                    audio.frame_count - written_frames,
+                )
+
+                end_frame = written_frames + frames_to_write
+
+                underflowed = stream.write(
+                    samples[written_frames:end_frame],
+                )
+
+                if underflowed:
+                    raise AudioBackendError(
+                        f"Output underflow while playing through device index {device.index}",
+                    )
+
+                written_frames = end_frame
+
+            stream.stop()
+
+        except sd.PortAudioError as exc:
+            if stream is not None:
+                stream.abort(ignore_errors=True)
+
+            raise AudioBackendError(
+                f"Could not play through device index {device.index}: {exc}",
+            ) from exc
+
+        except AudioBackendError:
+            if stream is not None:
+                stream.abort(ignore_errors=True)
+            raise
+
+        finally:
+            if stream is not None:
+                stream.close(ignore_errors=True)
