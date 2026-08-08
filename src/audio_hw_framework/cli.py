@@ -6,6 +6,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from audio_hw_framework.audio import WavFileError, read_wav
 from audio_hw_framework.backend.base import AudioBackendError
 from audio_hw_framework.backend.sounddevice_backend import SoundDeviceBackend
 from audio_hw_framework.configuration.loader import (
@@ -17,6 +18,16 @@ from audio_hw_framework.device.matcher import (
     find_matching_devices,
 )
 from audio_hw_framework.device.models import AudioDevice
+from audio_hw_framework.playback import (
+    PlaybackExecutionError,
+    PlaybackResult,
+    play_configured_audio,
+)
+from audio_hw_framework.recording import (
+    RecordingExecutionError,
+    RecordingResult,
+    record_configured_audio,
+)
 from audio_hw_framework.validation import (
     StreamValidationResult,
     validate_configured_stream,
@@ -83,6 +94,52 @@ def build_stream_validation_table(
     table.add_row("Output channels", str(result.stream.output_channels))
     table.add_row("Block size", block_size)
     table.add_row("Data type", result.stream.dtype.value)
+
+    return table
+
+
+def build_recording_validation_table(
+    result: RecordingResult,
+) -> Table:
+    """Build a human-readable recording validation summary."""
+
+    table = Table(title="Recording validation passed")
+
+    table.add_column("Setting")
+    table.add_column("Value")
+
+    table.add_row("Backend", result.backend.name)
+    table.add_row("Device", result.device.name)
+    table.add_row("Device index", str(result.device.index))
+    table.add_row("Host API", result.device.host_api_name)
+    table.add_row("Sample rate", f"{result.audio.sample_rate} Hz")
+    table.add_row("Channels", str(result.audio.channel_count))
+    table.add_row("Frames recorded", str(result.audio.frame_count))
+    table.add_row(
+        "Output file",
+        str(result.output_file) if result.output_file is not None else "not exported",
+    )
+
+    return table
+
+
+def build_playback_validation_table(
+    result: PlaybackResult,
+) -> Table:
+    """Build a human-readable playback validation summary."""
+
+    table = Table(title="Playback validation passed")
+
+    table.add_column("Setting")
+    table.add_column("Value")
+
+    table.add_row("Backend", result.backend.name)
+    table.add_row("Device", result.device.name)
+    table.add_row("Device index", str(result.device.index))
+    table.add_row("Host API", result.device.host_api_name)
+    table.add_row("Sample rate", f"{result.audio.sample_rate} Hz")
+    table.add_row("Channels", str(result.audio.channel_count))
+    table.add_row("Frames played", str(result.audio.frame_count))
 
     return table
 
@@ -218,3 +275,146 @@ def validate_stream(
         return
 
     console.print(build_stream_validation_table(result))
+
+
+@app.command("validate-recording")
+def validate_recording(
+    config_path: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            "-c",
+            help="YAML configuration file for recording validation.",
+        ),
+    ],
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Output recording validation results as JSON.",
+        ),
+    ] = False,
+) -> None:
+    """Execute and validate a finite configured recording."""
+
+    backend = SoundDeviceBackend()
+
+    try:
+        config = load_config(config_path)
+        result = record_configured_audio(
+            backend,
+            config,
+        )
+
+    except (
+        AudioBackendError,
+        ConfigurationError,
+        DeviceMatchError,
+        RecordingExecutionError,
+        WavFileError,
+    ) as exc:
+        error_console.print(f"[bold red]Error:[/bold red] {exc}")
+        raise typer.Exit(code=2) from exc
+
+    if json_output:
+        payload = {
+            "status": "passed",
+            "backend": {
+                "name": result.backend.name,
+                "library": result.backend.library,
+                "library_version": result.backend.library_version,
+            },
+            "device": result.device.model_dump(mode="json"),
+            "stream": result.stream.model_dump(mode="json"),
+            "recording": {
+                "sample_rate": result.audio.sample_rate,
+                "channels": result.audio.channel_count,
+                "frames": result.audio.frame_count,
+                "output_file": (
+                    str(result.output_file) if result.output_file is not None else None
+                ),
+            },
+        }
+
+        typer.echo(json.dumps(payload, indent=2))
+        return
+
+    console.print(
+        build_recording_validation_table(result),
+    )
+
+
+@app.command("validate-playback")
+def validate_playback(
+    config_path: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            "-c",
+            help="YAML configuration file for playback validation.",
+        ),
+    ],
+    input_file: Annotated[
+        Path,
+        typer.Option(
+            "--input",
+            "-i",
+            help="WAV file to use for playback validation.",
+        ),
+    ],
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Output playback validation results as JSON.",
+        ),
+    ] = False,
+) -> None:
+    """Execute and validate finite playback from a WAV file."""
+
+    backend = SoundDeviceBackend()
+
+    try:
+        config = load_config(config_path)
+        audio = read_wav(input_file)
+
+        result = play_configured_audio(
+            backend,
+            config,
+            audio,
+        )
+
+    except (
+        AudioBackendError,
+        ConfigurationError,
+        DeviceMatchError,
+        PlaybackExecutionError,
+        WavFileError,
+    ) as exc:
+        error_console.print(f"[bold red]Error:[/bold red] {exc}")
+        raise typer.Exit(code=2) from exc
+
+    if json_output:
+        payload = {
+            "status": "passed",
+            "backend": {
+                "name": result.backend.name,
+                "library": result.backend.library,
+                "library_version": result.backend.library_version,
+            },
+            "device": result.device.model_dump(mode="json"),
+            "stream": result.stream.model_dump(mode="json"),
+            "playback": {
+                "input_file": str(input_file),
+                "sample_rate": result.audio.sample_rate,
+                "channels": result.audio.channel_count,
+                "frames": result.audio.frame_count,
+            },
+        }
+
+        typer.echo(json.dumps(payload, indent=2))
+        return
+
+    console.print(
+        build_playback_validation_table(result),
+    )
