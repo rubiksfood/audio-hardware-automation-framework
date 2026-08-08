@@ -71,30 +71,37 @@ def _normalise_to_float32(
             dtype=np.float32,
         )
 
-    if np.issubdtype(samples.dtype, np.signedinteger):
-        info = np.iinfo(samples.dtype)
-        scale = float(max(abs(info.min), info.max))
+    if samples.dtype == np.dtype(np.int8):
+        scale = np.float32(128.0)
 
-        return (
-            np.asarray(
-                samples,
-                dtype=np.float32,
-            )
-            / scale
+    elif samples.dtype == np.dtype(np.int16):
+        scale = np.float32(32_768.0)
+
+    elif samples.dtype == np.dtype(np.int32):
+        scale = np.float32(2_147_483_648.0)
+
+    elif samples.dtype == np.dtype(np.uint8):
+        midpoint = np.float32(128.0)
+
+        result = np.asarray(
+            samples,
+            dtype=np.float32,
         )
 
-    if np.issubdtype(samples.dtype, np.unsignedinteger):
-        info = np.iinfo(samples.dtype)
-        midpoint = float(info.max + 1) / 2.0
+        result -= midpoint
+        result /= midpoint
 
-        return (
-            np.asarray(
-                samples,
-                dtype=np.float32,
-            )
-            - midpoint
-        ) / midpoint
+        return result
 
-    raise WavFileError(
-        f"Unsupported WAV sample dtype: {samples.dtype}",
+    else:
+        raise WavFileError(
+            f"Unsupported WAV sample dtype: {samples.dtype}",
+        )
+
+    result = np.asarray(
+        samples,
+        dtype=np.float32,
     )
+
+    result /= scale
+    return result

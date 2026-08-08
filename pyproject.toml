@@ -85,7 +85,10 @@ strict = true
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["sounddevice"]
+module = [
+    "sounddevice",
+    "soundfile",
+]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

@@ -315,8 +315,8 @@ def test_exports_recording_when_output_file_is_configured(
     assert exported.sample_rate == result.audio.sample_rate
 
     np.testing.assert_allclose(
-        exported.samples,
-        result.audio.samples,
+        np.asarray(exported.samples, dtype=np.float32),
+        np.asarray(result.audio.samples, dtype=np.float32),
     )
 
 

@@ -39,8 +39,8 @@ def test_writes_and_reads_float32_wav(
     assert result.samples.dtype == np.float32
 
     np.testing.assert_allclose(
-        result.samples,
-        audio.samples,
+        np.asarray(result.samples, dtype=np.float32),
+        np.asarray(audio.samples, dtype=np.float32),
     )
 
 
@@ -93,7 +93,7 @@ def test_normalises_integer_samples_when_writing(
     assert result.samples.dtype == np.float32
 
     np.testing.assert_allclose(
-        result.samples[:, 0],
+        np.asarray(result.samples[:, 0], dtype=np.float32),
         np.array(
             [
                 -1.0,
@@ -127,7 +127,7 @@ def test_normalises_unsigned_integer_samples_when_writing(
     result = read_wav(path)
 
     np.testing.assert_allclose(
-        result.samples[:, 0],
+        np.asarray(result.samples[:, 0], dtype=np.float32),
         np.array(
             [
                 -1.0,
