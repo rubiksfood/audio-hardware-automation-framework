@@ -351,7 +351,10 @@ audio-hardware-automation-framework/
 │       ├── phase-1-windows-device-discovery.png
 │       ├── phase-2-linux-duplex-validation.png
 │       ├── phase-2-negative-validation.png
-│       └── phase-2-stream-validation.png
+│       ├── phase-2-stream-validation.png
+│       ├── phase-3-playback-validation.png
+│       ├── phase-3-pytest-coverage.png
+│       └── phase-3-recording-validation.png
 │
 ├── src/
 │   └── audio_hw_framework/
@@ -555,7 +558,10 @@ Current validation:
 - PortAudio input/output capability validation
 - Input-only, output-only or duplex stream construction
 - Configured block-size application during stream construction
-- Safe stream closure without recording or playback
+- Safe stream construction and closure
+- Finite recording through the Scarlett input
+- WAV export of recorded audio
+- Finite playback through the Scarlett output
 - Structured CLI and JSON validation reporting
 
 Platforms tested:
@@ -630,25 +636,56 @@ Explains:
 
 ## Evidence
 
-### Windows device discovery
+### Phase 1
+
+#### Windows device discovery
 
 ![Windows device discovery](docs/images/phase-1-windows-device-discovery.png)
 
-### Linux device discovery
+#### Linux device discovery
 
 ![Linux device discovery](docs/images/phase-1-linux-device-discovery.png)
 
-### GitHub Actions
+#### GitHub Actions
 
 ![GitHub Actions passing](docs/images/phase-1-github-actions-passing.png)
 
-### pytest coverage
+#### pytest coverage
 
 ![pytest coverage](docs/images/phase-1-pytest-coverage.png)
 
-### WDM-KS hotplug verification
+#### WDM-KS hotplug verification
 
 ![WDM-KS hotplug verification](docs/images/phase-1-wdmks-hotplug-verification.png)
+
+### Phase 2
+
+#### Stream validation (JSON)
+
+![stream validation (JSON)](docs/images/phase-2-stream-validation.png)
+
+#### Linux duplex validation
+
+![linux duplex validation](docs/images/phase-2-linux-duplex-validation.png)
+
+#### Negative stream validation
+
+![negative stream validation](docs/images/phase-2-negative-validation.png)
+
+### Phase 3
+
+#### Recording validation
+
+![recording validation](docs/images/phase-3-recording-validation.png)
+
+#### Playback validation
+
+![playback validation](docs/images/phase-3-playback-validation.png)
+
+#### pytest coverage
+
+![pytest coverage](docs/images/phase-3-pytest-coverage.png)
+
 
 ---
 
