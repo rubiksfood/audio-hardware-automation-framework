@@ -199,7 +199,7 @@ CLI validation failures exit with code `2`.
 
 ## Validation Boundaries
 
-Phase 3 validates:
+Recording and playback validation covers:
 
 - Device selection
 - Stream capability
@@ -211,7 +211,7 @@ Phase 3 validates:
 - Timeout handling
 - Backend execution failures
 
-Phase 3 does not validate:
+Recording and playback validation does not by itself validate:
 
 - Signal quality
 - Frequency response
@@ -222,5 +222,3 @@ Phase 3 does not validate:
 - Round-trip latency
 - Loopback correctness
 - Long-duration stability
-
-These are reserved for later phases.
