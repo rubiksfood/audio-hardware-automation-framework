@@ -3,14 +3,15 @@
 The `validate-stream` command validates whether a configured audio device can support and open a requested PortAudio stream.
 
 ```bash
-audio-hw validate-stream --config configs/example_duplex_device.yaml
+audio-hw validate-stream \
+  --config configs/scarlett_windows_wasapi_input.yaml
 ```
 
 JSON output is also available:
 
 ```bash
 audio-hw validate-stream \
-  --config configs/example_duplex_device.yaml \
+  --config configs/scarlett_windows_wasapi_input.yaml \
   --json
 ```
 

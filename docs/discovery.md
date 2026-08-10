@@ -172,26 +172,23 @@ The framework supports host API filtering through the `host_api_contains` config
 
 ---
 
-## Current Scope
+## Discovery Scope
 
-Currently implemented:
+Device discovery provides:
 
-- Audio device enumeration
+- Audio-device enumeration
 - Device metadata collection
-- Device matching
-- CLI device inspection
-- JSON reporting
-- Unique configured-device selection
-- Stream capability validation
-- Stream construction and safe closure
+- Host API identification
+- Configuration-driven device matching
+- CLI and JSON reporting
 
-Not yet implemented:
+Discovery does not validate:
 
-- Actual recording
-- Actual playback
-- Measured sample-rate verification
-- Effective runtime buffer-size measurement
-- Loopback, latency and stability testing
+- Stream capability
+- Recording or playback execution
+- Signal quality
+- Latency
+- Stability
 
 ---
 
@@ -201,4 +198,6 @@ Device discovery means that the framework can locate a device that matches the s
 
 It does not mean that the device functions correctly.
 
-Stream capability and opening validation are implemented. Recording, playback and signal-path validation remain planned.
+Stream capability, stream opening, finite recording and finite playback validation are implemented.
+
+Signal-path and signal-quality validation remain planned.

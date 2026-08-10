@@ -1,10 +1,13 @@
 import json
 from pathlib import Path
 
+import numpy as np
 from pytest import MonkeyPatch
 from typer.testing import CliRunner
 
+from audio_hw_framework.audio import AudioBuffer, write_wav
 from audio_hw_framework.backend.base import (
+    AudioBackendError,
     DeviceEnumerationError,
     StreamCapabilityError,
     StreamOpenError,
@@ -47,6 +50,60 @@ stream:
   output_channels: 2
   block_size: 128
   dtype: "float32"
+""",
+        encoding="utf-8",
+    )
+
+
+def write_recording_config(
+    path: Path,
+    *,
+    output_file: Path | None = None,
+) -> None:
+    output_value = f'"{output_file.as_posix()}"' if output_file is not None else "null"
+
+    path.write_text(
+        f"""
+device:
+  name_contains: "Scarlett"
+  host_api_contains: "WASAPI"
+  minimum_input_channels: 2
+
+stream:
+  sample_rate: 48000
+  input_channels: 2
+  output_channels: 0
+  block_size: 128
+  dtype: "float32"
+
+execution:
+  duration_seconds: 0.001
+  timeout_seconds: 5.0
+  output_file: {output_value}
+""",
+        encoding="utf-8",
+    )
+
+
+def write_playback_config(
+    path: Path,
+) -> None:
+    path.write_text(
+        """
+device:
+  name_contains: "Scarlett"
+  host_api_contains: "WASAPI"
+  minimum_output_channels: 2
+
+stream:
+  sample_rate: 48000
+  input_channels: 0
+  output_channels: 2
+  block_size: 128
+  dtype: "float32"
+
+execution:
+  timeout_seconds: 5.0
 """,
         encoding="utf-8",
     )
@@ -598,3 +655,541 @@ def test_validate_stream_handles_opening_failure(
 
     assert result.exit_code == 2
     assert "Device is currently unavailable" in result.stderr
+
+
+def test_validate_recording_displays_success(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    device = create_test_device()
+    config_path = tmp_path / "recording.yaml"
+
+    write_recording_config(
+        config_path,
+    )
+
+    def fake_list_devices(
+        self: SoundDeviceBackend,
+    ) -> list[AudioDevice]:
+        return [device]
+
+    def accept_stream(
+        self: SoundDeviceBackend,
+        selected_device: AudioDevice,
+        config: StreamConfig,
+    ) -> None:
+        return None
+
+    def fake_record(
+        self: SoundDeviceBackend,
+        selected_device: AudioDevice,
+        config: StreamConfig,
+        *,
+        frame_count: int,
+        timeout_seconds: float,
+    ) -> AudioBuffer:
+        return AudioBuffer(
+            samples=np.zeros(
+                (frame_count, config.input_channels),
+                dtype=np.float32,
+            ),
+            sample_rate=config.sample_rate,
+        )
+
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "list_devices",
+        fake_list_devices,
+    )
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "validate_stream_capability",
+        accept_stream,
+    )
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "record",
+        fake_record,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "validate-recording",
+            "--config",
+            str(config_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Recording validation passed" in result.stdout
+    assert "Focusrite Scarlett 2i2 USB" in result.stdout
+    assert "48000 Hz" in result.stdout
+    assert "48" in result.stdout
+
+
+def test_validate_recording_outputs_json(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    device = create_test_device()
+    config_path = tmp_path / "recording.yaml"
+
+    write_recording_config(config_path)
+
+    def fake_list_devices(
+        self: SoundDeviceBackend,
+    ) -> list[AudioDevice]:
+        return [device]
+
+    def accept_stream(
+        self: SoundDeviceBackend,
+        selected_device: AudioDevice,
+        config: StreamConfig,
+    ) -> None:
+        return None
+
+    def fake_record(
+        self: SoundDeviceBackend,
+        selected_device: AudioDevice,
+        config: StreamConfig,
+        *,
+        frame_count: int,
+        timeout_seconds: float,
+    ) -> AudioBuffer:
+        return AudioBuffer(
+            samples=np.zeros(
+                (frame_count, config.input_channels),
+                dtype=np.float32,
+            ),
+            sample_rate=config.sample_rate,
+        )
+
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "list_devices",
+        fake_list_devices,
+    )
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "validate_stream_capability",
+        accept_stream,
+    )
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "record",
+        fake_record,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "validate-recording",
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+
+    payload = json.loads(result.stdout)
+
+    assert payload["status"] == "passed"
+    assert payload["backend"]["name"] == "portaudio"
+    assert payload["device"]["name"] == "Focusrite Scarlett 2i2 USB"
+    assert payload["recording"]["sample_rate"] == 48_000
+    assert payload["recording"]["channels"] == 2
+    assert payload["recording"]["frames"] == 48
+
+
+def test_validate_recording_exports_wav(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    device = create_test_device()
+    config_path = tmp_path / "recording.yaml"
+    output_file = tmp_path / "capture.wav"
+
+    write_recording_config(
+        config_path,
+        output_file=output_file,
+    )
+
+    def fake_list_devices(
+        self: SoundDeviceBackend,
+    ) -> list[AudioDevice]:
+        return [device]
+
+    def accept_stream(
+        self: SoundDeviceBackend,
+        selected_device: AudioDevice,
+        config: StreamConfig,
+    ) -> None:
+        return None
+
+    def fake_record(
+        self: SoundDeviceBackend,
+        selected_device: AudioDevice,
+        config: StreamConfig,
+        *,
+        frame_count: int,
+        timeout_seconds: float,
+    ) -> AudioBuffer:
+        return AudioBuffer(
+            samples=np.zeros(
+                (frame_count, config.input_channels),
+                dtype=np.float32,
+            ),
+            sample_rate=config.sample_rate,
+        )
+
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "list_devices",
+        fake_list_devices,
+    )
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "validate_stream_capability",
+        accept_stream,
+    )
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "record",
+        fake_record,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "validate-recording",
+            "--config",
+            str(config_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert output_file.is_file()
+
+
+def test_validate_playback_displays_success(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    device = create_test_device()
+    config_path = tmp_path / "playback.yaml"
+    input_file = tmp_path / "input.wav"
+
+    write_playback_config(config_path)
+
+    write_wav(
+        input_file,
+        AudioBuffer(
+            samples=np.zeros(
+                (48, 2),
+                dtype=np.float32,
+            ),
+            sample_rate=48_000,
+        ),
+    )
+
+    playback_calls: list[AudioBuffer] = []
+
+    def fake_list_devices(
+        self: SoundDeviceBackend,
+    ) -> list[AudioDevice]:
+        return [device]
+
+    def accept_stream(
+        self: SoundDeviceBackend,
+        selected_device: AudioDevice,
+        config: StreamConfig,
+    ) -> None:
+        return None
+
+    def fake_playback(
+        self: SoundDeviceBackend,
+        selected_device: AudioDevice,
+        config: StreamConfig,
+        audio: AudioBuffer,
+        *,
+        timeout_seconds: float,
+    ) -> None:
+        playback_calls.append(audio)
+
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "list_devices",
+        fake_list_devices,
+    )
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "validate_stream_capability",
+        accept_stream,
+    )
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "playback",
+        fake_playback,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "validate-playback",
+            "--config",
+            str(config_path),
+            "--input",
+            str(input_file),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Playback validation passed" in result.stdout
+    assert "Focusrite Scarlett 2i2 USB" in result.stdout
+    assert "48000 Hz" in result.stdout
+    assert "48" in result.stdout
+
+    assert len(playback_calls) == 1
+    assert playback_calls[0].frame_count == 48
+
+
+def test_validate_playback_outputs_json(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    device = create_test_device()
+    config_path = tmp_path / "playback.yaml"
+    input_file = tmp_path / "input.wav"
+
+    write_playback_config(config_path)
+
+    write_wav(
+        input_file,
+        AudioBuffer(
+            samples=np.zeros(
+                (48, 2),
+                dtype=np.float32,
+            ),
+            sample_rate=48_000,
+        ),
+    )
+
+    def fake_list_devices(
+        self: SoundDeviceBackend,
+    ) -> list[AudioDevice]:
+        return [device]
+
+    def accept_stream(
+        self: SoundDeviceBackend,
+        selected_device: AudioDevice,
+        config: StreamConfig,
+    ) -> None:
+        return None
+
+    def fake_playback(
+        self: SoundDeviceBackend,
+        selected_device: AudioDevice,
+        config: StreamConfig,
+        audio: AudioBuffer,
+        *,
+        timeout_seconds: float,
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "list_devices",
+        fake_list_devices,
+    )
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "validate_stream_capability",
+        accept_stream,
+    )
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "playback",
+        fake_playback,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "validate-playback",
+            "--config",
+            str(config_path),
+            "--input",
+            str(input_file),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+
+    payload = json.loads(result.stdout)
+
+    assert payload["status"] == "passed"
+    assert payload["backend"]["name"] == "portaudio"
+    assert payload["playback"]["input_file"] == str(input_file)
+    assert payload["playback"]["sample_rate"] == 48_000
+    assert payload["playback"]["channels"] == 2
+    assert payload["playback"]["frames"] == 48
+
+
+def test_validate_playback_handles_missing_input_file(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "playback.yaml"
+    input_file = tmp_path / "missing.wav"
+
+    write_playback_config(config_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "validate-playback",
+            "--config",
+            str(config_path),
+            "--input",
+            str(input_file),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "Could not read WAV file" in result.stderr
+
+
+def test_validate_recording_handles_backend_error(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    device = create_test_device()
+    config_path = tmp_path / "recording.yaml"
+
+    write_recording_config(config_path)
+
+    def fake_list_devices(
+        self: SoundDeviceBackend,
+    ) -> list[AudioDevice]:
+        return [device]
+
+    def accept_stream(
+        self: SoundDeviceBackend,
+        selected_device: AudioDevice,
+        config: StreamConfig,
+    ) -> None:
+        return None
+
+    def fail_recording(
+        self: SoundDeviceBackend,
+        selected_device: AudioDevice,
+        config: StreamConfig,
+        *,
+        frame_count: int,
+        timeout_seconds: float,
+    ) -> AudioBuffer:
+        raise AudioBackendError("Recording failed")
+
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "list_devices",
+        fake_list_devices,
+    )
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "validate_stream_capability",
+        accept_stream,
+    )
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "record",
+        fail_recording,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "validate-recording",
+            "--config",
+            str(config_path),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "Recording failed" in result.stderr
+
+
+def test_validate_playback_handles_backend_error(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    device = create_test_device()
+    config_path = tmp_path / "playback.yaml"
+    input_file = tmp_path / "input.wav"
+
+    write_playback_config(config_path)
+
+    write_wav(
+        input_file,
+        AudioBuffer(
+            samples=np.zeros(
+                (48, 2),
+                dtype=np.float32,
+            ),
+            sample_rate=48_000,
+        ),
+    )
+
+    def fake_list_devices(
+        self: SoundDeviceBackend,
+    ) -> list[AudioDevice]:
+        return [device]
+
+    def accept_stream(
+        self: SoundDeviceBackend,
+        selected_device: AudioDevice,
+        config: StreamConfig,
+    ) -> None:
+        return None
+
+    def fail_playback(
+        self: SoundDeviceBackend,
+        selected_device: AudioDevice,
+        config: StreamConfig,
+        audio: AudioBuffer,
+        *,
+        timeout_seconds: float,
+    ) -> None:
+        raise AudioBackendError("Playback failed")
+
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "list_devices",
+        fake_list_devices,
+    )
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "validate_stream_capability",
+        accept_stream,
+    )
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "playback",
+        fail_playback,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "validate-playback",
+            "--config",
+            str(config_path),
+            "--input",
+            str(input_file),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "Playback failed" in result.stderr

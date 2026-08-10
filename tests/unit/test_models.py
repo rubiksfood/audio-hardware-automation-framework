@@ -1,9 +1,14 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
 from audio_hw_framework.device.models import (
     AudioDevice,
+    AudioExecutionConfig,
     DeviceDirection,
+    DeviceMatchConfig,
+    FrameworkConfig,
     SampleDType,
     StreamConfig,
 )
@@ -152,3 +157,62 @@ def test_stream_config_rejects_stream_with_no_active_channels() -> None:
             input_channels=0,
             output_channels=0,
         )
+
+
+def test_audio_execution_config_uses_defaults() -> None:
+    config = AudioExecutionConfig()
+
+    assert config.duration_seconds == 1.0
+    assert config.timeout_seconds == 5.0
+    assert config.output_file is None
+
+
+def test_audio_execution_config_accepts_positive_duration() -> None:
+    config = AudioExecutionConfig(duration_seconds=2.5)
+
+    assert config.duration_seconds == 2.5
+
+
+def test_audio_execution_config_rejects_zero_duration() -> None:
+    with pytest.raises(ValidationError):
+        AudioExecutionConfig(duration_seconds=0)
+
+
+def test_audio_execution_config_rejects_negative_duration() -> None:
+    with pytest.raises(ValidationError):
+        AudioExecutionConfig(duration_seconds=-1)
+
+
+def test_audio_execution_config_accepts_positive_timeout() -> None:
+    config = AudioExecutionConfig(timeout_seconds=10.0)
+
+    assert config.timeout_seconds == 10.0
+
+
+def test_audio_execution_config_rejects_zero_timeout() -> None:
+    with pytest.raises(ValidationError):
+        AudioExecutionConfig(timeout_seconds=0)
+
+
+def test_audio_execution_config_rejects_negative_timeout() -> None:
+    with pytest.raises(ValidationError):
+        AudioExecutionConfig(timeout_seconds=-1)
+
+
+def test_audio_execution_config_accepts_output_file() -> None:
+    config = AudioExecutionConfig(
+        output_file=Path("recordings/test.wav"),
+    )
+
+    assert config.output_file == Path("recordings/test.wav")
+
+
+def test_framework_config_uses_default_execution_config() -> None:
+    config = FrameworkConfig(
+        device=DeviceMatchConfig(
+            name_contains="Scarlett",
+        ),
+        stream=StreamConfig(),
+    )
+
+    assert config.execution == AudioExecutionConfig()

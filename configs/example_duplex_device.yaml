@@ -9,3 +9,8 @@ stream:
   output_channels: 2
   block_size: null
   dtype: float32
+
+execution:
+  duration_seconds: 1.0
+  timeout_seconds: 5.0
+  output_file: null

@@ -5,14 +5,16 @@ build-backend = "hatchling.build"
 
 [project]
 name = "audio-hardware-automation-framework"
-version = "0.2.0"
+version = "0.3.0"
 description = "Framework for automated audio hardware testing and validation."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "numpy>=2.0,<3.0",
     "pydantic>=2.0,<3.0",
     "PyYAML>=6.0,<7.0",
     "sounddevice>=0.5,<1.0",
+    "soundfile>=0.14,<1.0",
     "typer>=0.12,<1.0",
     "rich>=13,<15",
 ]
@@ -83,7 +85,10 @@ strict = true
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["sounddevice"]
+module = [
+    "sounddevice",
+    "soundfile",
+]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

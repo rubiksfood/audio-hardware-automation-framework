@@ -10,7 +10,7 @@ This project demonstrates QA automation, hardware testing, configuration-driven 
 
 ## Project Status
 
-**Phase 2 complete — configuration-driven stream validation**
+**Phase 3 complete — recording and playback foundations**
 
 Completed capabilities include:
 
@@ -19,10 +19,15 @@ Completed capabilities include:
 - Input-only, output-only, and duplex stream validation
 - PortAudio capability checks
 - Safe stream construction and closure
+- Finite-duration recording
+- Finite-buffer playback
+- Framework-owned audio buffers
+- WAV import and export
+- Backend-independent recording and playback services
 - Rich CLI and structured JSON reporting
 - Windows and Linux hardware validation
 
-**Current development:** Phase 3 — recording and playback foundations.
+**Current development:** later-phase signal generation, analysis, loopback, latency, and stability validation.
 
 See the [Roadmap](#roadmap) for planned development.
 
@@ -38,9 +43,9 @@ The framework aims to provide a reusable foundation for automated testing of aud
 - Audio drivers
 - Recording and playback systems
 
-The current focus is reliable device discovery, configuration management, hardware identification, stream-capability validation, and safe stream-opening checks.
+The current foundation includes reliable device discovery, configuration management, hardware identification, stream-capability validation, finite recording, finite playback, and WAV file handling.
 
-Future releases will add playback, recording, loopback testing, measured sample-rate verification, audio quality analysis, latency observation, and stability testing.
+Future releases will add signal generation, loopback testing, measured sample-rate verification, audio quality analysis, latency observation, and stability testing.
 
 ---
 
@@ -114,18 +119,66 @@ audio-hw inspect-devices --json
 Validate a configured stream:
 
 ```bash
-audio-hw validate-stream --config configs/example_duplex_device.yaml
+audio-hw validate-stream \
+  --config configs/scarlett_windows_wasapi_input.yaml
 ```
 
 Output validation results as JSON:
 
 ```bash
 audio-hw validate-stream \
-  --config configs/example_duplex_device.yaml \
+  --config configs/scarlett_windows_wasapi_input.yaml \
   --json
 ```
 
-The validation command requires exactly one matching device. It checks whether PortAudio accepts the requested stream settings and whether the requested stream can be constructed and closed safely.
+To create a WAV file for playback validation, first ensure the recording configuration contains an output path:
+
+```yaml
+execution:
+  duration_seconds: 1.0
+  timeout_seconds: 5.0
+  output_file: recordings/test.wav
+```
+
+Then run recording validation:
+
+```bash
+audio-hw validate-recording \
+  --config configs/scarlett_windows_wasapi_input.yaml
+```
+
+Then validate playback using the generated recording:
+
+```bash
+audio-hw validate-playback \
+  --config configs/scarlett_windows_wasapi_output.yaml \
+  --input recordings/test.wav
+```
+
+Output recording validation results as JSON:
+
+```bash
+audio-hw validate-recording \
+  --config configs/scarlett_windows_wasapi_input.yaml \
+  --json
+```
+
+Output playback validation results as JSON:
+
+```bash
+audio-hw validate-playback \
+  --config configs/scarlett_windows_wasapi_output.yaml \
+  --input recordings/test.wav \
+  --json
+```
+
+Validation commands require exactly one matching device.
+
+`validate-stream` checks whether PortAudio accepts the requested stream settings and whether the requested stream can be constructed and closed safely.
+
+`validate-recording` performs a finite recording using the configured duration and timeout. If `execution.output_file` is configured, the captured audio is exported as a WAV file.
+
+`validate-playback` reads a WAV file, verifies that its sample rate and channel count match the configured output stream, and performs finite playback through the selected device.
 
 ---
 
@@ -148,6 +201,44 @@ Validation is implemented through a backend-independent application service. Thi
 A successful stream-opening result does not start recording or playback and does not yet prove end-to-end audio signal quality.
 
 See [`docs/stream-validation.md`](docs/stream-validation.md) for validation scope, limitations, exit codes and the hardware test procedure.
+
+---
+
+### Recording and Playback Validation
+
+Phase 3 adds finite audio execution while preserving the framework's backend-independent architecture.
+
+Recording validation supports:
+
+- Configuration-driven input-device selection
+- Finite-duration capture
+- Exact requested frame-count validation
+- Configurable execution timeout
+- Framework-owned `AudioBuffer` results
+- Optional WAV export
+- Human-readable and JSON CLI results
+
+Playback validation supports:
+
+- Configuration-driven output-device selection
+- WAV input
+- Sample-rate compatibility validation
+- Channel-count compatibility validation
+- Finite-buffer playback
+- Configurable execution timeout
+- Human-readable and JSON CLI results
+
+Recording and playback failures are translated through framework-owned backend exceptions.
+
+Phase 3 validates execution and data flow only. It does not yet make claims about:
+
+- Audio quality
+- Frequency response
+- Distortion
+- Noise level
+- Measured sample-rate accuracy
+- Latency
+- Loopback correctness
 
 ---
 
@@ -183,9 +274,14 @@ The project includes:
 - Device matching tests
 - Configuration validation tests
 - Backend abstraction tests
+- Deterministic fake-backend tests
 - PortAudio capability-validation tests
 - Stream-opening tests
-- Validation-service orchestration tests
+- Recording and playback backend tests
+- Audio-buffer tests
+- WAV import/export tests
+- Recording-service orchestration tests
+- Playback-service orchestration tests
 - CLI tests
 
 GitHub Actions runs hardware-independent tests, linting, formatting checks, type checking, and coverage reporting on Ubuntu.
@@ -245,6 +341,7 @@ audio-hardware-automation-framework/
 ├── docs/
 │   ├── discovery.md
 │   ├── platform-support.md
+│   ├── recording-playback-validation.md
 │   ├── stream-validation.md
 │   └── images/
 │       ├── phase-1-github-actions-passing.png
@@ -254,10 +351,18 @@ audio-hardware-automation-framework/
 │       ├── phase-1-windows-device-discovery.png
 │       ├── phase-2-linux-duplex-validation.png
 │       ├── phase-2-negative-validation.png
-│       └── phase-2-stream-validation.png
+│       ├── phase-2-stream-validation.png
+│       ├── phase-3-playback-validation.png
+│       ├── phase-3-pytest-coverage.png
+│       └── phase-3-recording-validation.png
 │
 ├── src/
 │   └── audio_hw_framework/
+│       ├── audio/
+│       │   ├── __init__.py
+│       │   ├── audio_buffer.py
+│       │   └── wav.py
+│       │
 │       ├── backend/
 │       │   ├── __init__.py
 │       │   ├── base.py
@@ -273,6 +378,14 @@ audio-hardware-automation-framework/
 │       │   ├── matcher.py
 │       │   └── models.py
 │       │
+│       ├── playback/
+│       │   ├── __init__.py
+│       │   └── service.py
+│       │
+│       ├── recording/
+│       │   ├── __init__.py
+│       │   └── service.py
+│       │
 │       ├── validation/
 │       │   ├── __init__.py
 │       │   └── service.py
@@ -283,14 +396,18 @@ audio-hardware-automation-framework/
 │
 ├── tests/
 │   └── unit/
+│       ├── test_audio_buffer.py
 │       ├── test_backend.py
 │       ├── test_cli.py
 │       ├── test_configuration.py
 │       ├── test_device_matching.py
 │       ├── test_models.py
 │       ├── test_package.py
+│       ├── test_playback_service.py
+│       ├── test_recording_service.py
 │       ├── test_sounddevice_backend.py
-│       └── test_validation_service.py
+│       ├── test_validation_service.py
+│       └── test_wav.py
 │
 ├── pyproject.toml
 ├── README.md
@@ -441,7 +558,10 @@ Current validation:
 - PortAudio input/output capability validation
 - Input-only, output-only or duplex stream construction
 - Configured block-size application during stream construction
-- Safe stream closure without recording or playback
+- Safe stream construction and closure
+- Finite recording through the Scarlett input
+- WAV export of recorded audio
+- Finite playback through the Scarlett output
 - Structured CLI and JSON validation reporting
 
 Platforms tested:
@@ -496,27 +616,76 @@ Explains:
 * Validation scope and limitations
 * Focusrite hardware-validation procedure
 
+### Recording and Playback Validation
+
+```text
+docs/recording-playback-validation.md
+```
+
+Explains:
+
+* Recording execution workflow
+* Playback execution workflow
+* Execution configuration
+* WAV import and export
+* CLI and JSON output
+* Failure handling
+* Validation scope and limitations
+
+---
+
 ## Evidence
 
-### Windows device discovery
+### Phase 1
+
+#### Windows device discovery
 
 ![Windows device discovery](docs/images/phase-1-windows-device-discovery.png)
 
-### Linux device discovery
+#### Linux device discovery
 
 ![Linux device discovery](docs/images/phase-1-linux-device-discovery.png)
 
-### GitHub Actions
+#### GitHub Actions
 
 ![GitHub Actions passing](docs/images/phase-1-github-actions-passing.png)
 
-### pytest coverage
+#### pytest coverage
 
 ![pytest coverage](docs/images/phase-1-pytest-coverage.png)
 
-### WDM-KS hotplug verification
+#### WDM-KS hotplug verification
 
 ![WDM-KS hotplug verification](docs/images/phase-1-wdmks-hotplug-verification.png)
+
+### Phase 2
+
+#### Stream validation (JSON)
+
+![stream validation (JSON)](docs/images/phase-2-stream-validation.png)
+
+#### Linux duplex validation
+
+![linux duplex validation](docs/images/phase-2-linux-duplex-validation.png)
+
+#### Negative stream validation
+
+![negative stream validation](docs/images/phase-2-negative-validation.png)
+
+### Phase 3
+
+#### Recording validation
+
+![recording validation](docs/images/phase-3-recording-validation.png)
+
+#### Playback validation
+
+![playback validation](docs/images/phase-3-playback-validation.png)
+
+#### pytest coverage
+
+![pytest coverage](docs/images/phase-3-pytest-coverage.png)
+
 
 ---
 
@@ -548,13 +717,19 @@ Explains:
 
 ### Phase 3 — Recording and playback foundations
 
-**Planned**
+**Complete**
 
 - Finite-duration recording
-- Finite-duration playback
-- Audio buffer result models
+- Finite-buffer playback
+- Framework-owned audio buffer abstraction
 - WAV import and export
-- Execution services and CLI commands
+- Deterministic fake recording and playback
+- PortAudio recording and playback
+- Recording execution service
+- Playback execution service
+- `validate-recording` CLI command
+- `validate-playback` CLI command
+- Human-readable and JSON execution reporting
 
 ### Later phases
 
@@ -569,9 +744,11 @@ Explains:
 ## Technologies
 
 - Python 3.13
+- NumPy
 - Pydantic
 - PyYAML
 - sounddevice
+- soundfile
 - PortAudio
 - pytest
 - mypy
@@ -602,6 +779,13 @@ This project demonstrates:
 - Framework-owned exception translation
 - Deterministic test doubles
 - Stream lifecycle validation
+- Finite audio execution testing
+- Immutable framework-owned audio data models
+- WAV file I/O validation
+- PortAudio stream lifecycle management
+- Timeout, overflow, and underflow handling
+- Backend contract enforcement
+- Recording and playback service orchestration
 - Human-readable and machine-readable reporting
 
 ---
