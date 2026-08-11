@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from audio_hw_framework.configuration.thresholds import AudioMetricThresholds
 from audio_hw_framework.device.models import (
     AudioDevice,
     AudioExecutionConfig,
@@ -216,3 +217,70 @@ def test_framework_config_uses_default_execution_config() -> None:
     )
 
     assert config.execution == AudioExecutionConfig()
+
+
+def test_audio_metric_thresholds_use_defaults() -> None:
+    thresholds = AudioMetricThresholds()
+
+    assert thresholds.minimum_rms is None
+    assert thresholds.maximum_rms is None
+    assert thresholds.maximum_peak is None
+    assert thresholds.maximum_abs_dc_offset is None
+    assert thresholds.silence_threshold == 1e-4
+    assert thresholds.clipping_threshold == 1.0
+    assert thresholds.fail_on_silence is True
+    assert thresholds.fail_on_clipping is True
+
+
+def test_audio_metric_thresholds_accept_valid_values() -> None:
+    thresholds = AudioMetricThresholds(
+        minimum_rms=0.1,
+        maximum_rms=0.8,
+        maximum_peak=0.9,
+        maximum_abs_dc_offset=0.01,
+        silence_threshold=0.001,
+        clipping_threshold=0.95,
+    )
+
+    assert thresholds.minimum_rms == 0.1
+    assert thresholds.maximum_rms == 0.8
+    assert thresholds.maximum_peak == 0.9
+    assert thresholds.maximum_abs_dc_offset == 0.01
+    assert thresholds.silence_threshold == 0.001
+    assert thresholds.clipping_threshold == 0.95
+
+
+def test_audio_metric_thresholds_reject_invalid_rms_range() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="minimum_rms must be less than or equal to maximum_rms",
+    ):
+        AudioMetricThresholds(
+            minimum_rms=0.8,
+            maximum_rms=0.2,
+        )
+
+
+def test_audio_metric_thresholds_reject_negative_silence_threshold() -> None:
+    with pytest.raises(ValidationError):
+        AudioMetricThresholds(
+            silence_threshold=-0.1,
+        )
+
+
+def test_audio_metric_thresholds_reject_non_positive_clipping_threshold() -> None:
+    with pytest.raises(ValidationError):
+        AudioMetricThresholds(
+            clipping_threshold=0.0,
+        )
+
+
+def test_framework_config_uses_default_metric_thresholds() -> None:
+    config = FrameworkConfig(
+        device=DeviceMatchConfig(
+            name_contains="Scarlett",
+        ),
+        stream=StreamConfig(),
+    )
+
+    assert config.thresholds == AudioMetricThresholds()

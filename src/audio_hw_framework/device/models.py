@@ -6,6 +6,8 @@ from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from audio_hw_framework.configuration.thresholds import AudioMetricThresholds
+
 
 class DeviceDirection(StrEnum):
     """Direction in which an audio device can transfer audio."""
@@ -103,4 +105,7 @@ class FrameworkConfig(BaseModel):
     stream: StreamConfig
     execution: AudioExecutionConfig = Field(
         default_factory=AudioExecutionConfig,
+    )
+    thresholds: AudioMetricThresholds = Field(
+        default_factory=AudioMetricThresholds,
     )
