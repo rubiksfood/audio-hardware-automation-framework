@@ -274,3 +274,37 @@ thresholds:
 
     assert result.exit_code == 2
     assert "Invalid configuration" in result.stderr
+
+
+def test_analyse_audio_handles_empty_wav(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "analysis.yaml"
+    input_file = tmp_path / "empty.wav"
+
+    write_analysis_config(config_path)
+
+    write_wav(
+        input_file,
+        AudioBuffer(
+            samples=np.empty(
+                (0, 1),
+                dtype=np.float32,
+            ),
+            sample_rate=48_000,
+        ),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "analyse-audio",
+            "--config",
+            str(config_path),
+            "--input",
+            str(input_file),
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "requires at least one audio frame" in result.stderr

@@ -6,6 +6,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from audio_hw_framework.analysis import AudioAnalysisError
 from audio_hw_framework.audio import WavFileError, read_wav
 from audio_hw_framework.backend.base import AudioBackendError
 from audio_hw_framework.backend.sounddevice_backend import SoundDeviceBackend
@@ -527,6 +528,7 @@ def analyse_audio(
         )
 
     except (
+        AudioAnalysisError,
         ConfigurationError,
         WavFileError,
     ) as exc:

@@ -1,7 +1,10 @@
 import numpy as np
 import pytest
 
-from audio_hw_framework.analysis import analyse_peak
+from audio_hw_framework.analysis import (
+    EmptyAudioBufferError,
+    analyse_peak,
+)
 from audio_hw_framework.audio import AudioBuffer
 
 
@@ -122,7 +125,7 @@ def test_analyse_peak_rejects_empty_audio_buffer() -> None:
     )
 
     with pytest.raises(
-        ValueError,
+        EmptyAudioBufferError,
         match="Peak analysis requires at least one audio frame",
     ):
         analyse_peak(audio)

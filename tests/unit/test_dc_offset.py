@@ -1,7 +1,10 @@
 import numpy as np
 import pytest
 
-from audio_hw_framework.analysis import analyse_dc_offset
+from audio_hw_framework.analysis import (
+    EmptyAudioBufferError,
+    analyse_dc_offset,
+)
 from audio_hw_framework.audio import AudioBuffer
 
 
@@ -140,7 +143,7 @@ def test_analyse_dc_offset_rejects_empty_audio_buffer() -> None:
     )
 
     with pytest.raises(
-        ValueError,
+        EmptyAudioBufferError,
         match="DC offset analysis requires at least one audio frame",
     ):
         analyse_dc_offset(audio)

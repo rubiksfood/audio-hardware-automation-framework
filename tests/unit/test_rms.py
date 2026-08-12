@@ -1,7 +1,10 @@
 import numpy as np
 import pytest
 
-from audio_hw_framework.analysis import analyse_rms
+from audio_hw_framework.analysis import (
+    EmptyAudioBufferError,
+    analyse_rms,
+)
 from audio_hw_framework.audio import AudioBuffer
 
 
@@ -137,7 +140,7 @@ def test_analyse_rms_rejects_empty_audio_buffer() -> None:
     )
 
     with pytest.raises(
-        ValueError,
+        EmptyAudioBufferError,
         match="RMS analysis requires at least one audio frame",
     ):
         analyse_rms(audio)

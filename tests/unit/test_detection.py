@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from audio_hw_framework.analysis import (
+    EmptyAudioBufferError,
     detect_clipping,
     detect_silence,
 )
@@ -118,7 +119,7 @@ def test_detect_silence_rejects_empty_audio_buffer() -> None:
     )
 
     with pytest.raises(
-        ValueError,
+        EmptyAudioBufferError,
         match="Silence detection requires at least one audio frame",
     ):
         detect_silence(audio)
@@ -248,7 +249,7 @@ def test_detect_clipping_rejects_empty_audio_buffer() -> None:
     )
 
     with pytest.raises(
-        ValueError,
+        EmptyAudioBufferError,
         match="Clipping detection requires at least one audio frame",
     ):
         detect_clipping(audio)

@@ -3,6 +3,7 @@
 import numpy as np
 
 from audio_hw_framework.analysis._samples import as_finite_float64_samples
+from audio_hw_framework.analysis.exceptions import EmptyAudioBufferError
 from audio_hw_framework.analysis.models import DetectionAnalysisResult
 from audio_hw_framework.audio import AudioBuffer
 
@@ -18,7 +19,7 @@ def detect_silence(
     """Detect whether audio remains at or below a silence threshold."""
 
     if audio.frame_count == 0:
-        raise ValueError(
+        raise EmptyAudioBufferError(
             "Silence detection requires at least one audio frame",
         )
 
@@ -54,7 +55,7 @@ def detect_clipping(
     """Detect samples at or above an absolute clipping threshold."""
 
     if audio.frame_count == 0:
-        raise ValueError(
+        raise EmptyAudioBufferError(
             "Clipping detection requires at least one audio frame",
         )
 
