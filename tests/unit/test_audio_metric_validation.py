@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from audio_hw_framework.audio import AudioBuffer
 from audio_hw_framework.configuration.thresholds import AudioMetricThresholds
@@ -211,3 +212,25 @@ def test_audio_metric_validation_can_allow_clipping() -> None:
     )
 
     assert result.passed is True
+
+
+def test_audio_metric_validation_rejects_non_finite_samples() -> None:
+    audio = AudioBuffer(
+        samples=np.array(
+            [
+                [0.25],
+                [np.nan],
+            ],
+            dtype=np.float32,
+        ),
+        sample_rate=48_000,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Audio analysis requires finite sample values",
+    ):
+        validate_audio_metrics(
+            audio,
+            AudioMetricThresholds(),
+        )

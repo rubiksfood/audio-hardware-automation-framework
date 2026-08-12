@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from audio_hw_framework.analysis._samples import as_finite_float64_samples
 from audio_hw_framework.analysis.models import DetectionAnalysisResult
 from audio_hw_framework.audio import AudioBuffer
 
@@ -26,10 +27,7 @@ def detect_silence(
             "Silence threshold must be greater than or equal to 0",
         )
 
-    samples = np.asarray(
-        audio.samples,
-        dtype=np.float64,
-    )
+    samples = as_finite_float64_samples(audio)
 
     absolute_samples = np.abs(samples)
 
@@ -65,10 +63,7 @@ def detect_clipping(
             "Clipping threshold must be greater than 0",
         )
 
-    samples = np.asarray(
-        audio.samples,
-        dtype=np.float64,
-    )
+    samples = as_finite_float64_samples(audio)
 
     absolute_samples = np.abs(samples)
 

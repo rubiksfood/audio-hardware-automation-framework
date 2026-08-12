@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from audio_hw_framework.analysis._samples import as_finite_float64_samples
 from audio_hw_framework.analysis.models import MetricAnalysisResult
 from audio_hw_framework.audio import AudioBuffer
 
@@ -14,10 +15,7 @@ def analyse_peak(audio: AudioBuffer) -> MetricAnalysisResult:
             "Peak analysis requires at least one audio frame",
         )
 
-    samples = np.asarray(
-        audio.samples,
-        dtype=np.float64,
-    )
+    samples = as_finite_float64_samples(audio)
 
     absolute_samples = np.abs(samples)
 
