@@ -9,15 +9,28 @@ class SignalConfig(BaseModel):
     """Common configuration shared by generated audio signals."""
 
     sample_rate: int = Field(default=48_000, gt=0)
-    duration_seconds: float = Field(default=1.0, gt=0)
+    duration_seconds: float = Field(
+        default=1.0,
+        gt=0,
+        allow_inf_nan=False,
+    )
     channel_count: int = Field(default=1, gt=0)
 
 
 class SineWaveConfig(SignalConfig):
     """Configuration for a deterministic sine-wave signal."""
 
-    frequency_hz: float = Field(default=1_000.0, gt=0)
-    amplitude: float = Field(default=1.0, ge=0.0, le=1.0)
+    frequency_hz: float = Field(
+        default=1_000.0,
+        gt=0,
+        allow_inf_nan=False,
+    )
+    amplitude: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        allow_inf_nan=False,
+    )
 
     @model_validator(mode="after")
     def validate_frequency_below_nyquist(self) -> Self:

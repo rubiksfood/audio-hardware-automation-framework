@@ -150,3 +150,45 @@ def test_silence_config_uses_signal_defaults() -> None:
     assert config.sample_rate == 48_000
     assert config.duration_seconds == 1.0
     assert config.channel_count == 1
+
+
+def test_signal_config_rejects_infinite_duration() -> None:
+    with pytest.raises(ValidationError):
+        SignalConfig(
+            duration_seconds=float("inf"),
+        )
+
+
+def test_signal_config_rejects_nan_duration() -> None:
+    with pytest.raises(ValidationError):
+        SignalConfig(
+            duration_seconds=float("nan"),
+        )
+
+
+def test_sine_wave_config_rejects_infinite_frequency() -> None:
+    with pytest.raises(ValidationError):
+        SineWaveConfig(
+            frequency_hz=float("inf"),
+        )
+
+
+def test_sine_wave_config_rejects_nan_frequency() -> None:
+    with pytest.raises(ValidationError):
+        SineWaveConfig(
+            frequency_hz=float("nan"),
+        )
+
+
+def test_sine_wave_config_rejects_infinite_amplitude() -> None:
+    with pytest.raises(ValidationError):
+        SineWaveConfig(
+            amplitude=float("inf"),
+        )
+
+
+def test_sine_wave_config_rejects_nan_amplitude() -> None:
+    with pytest.raises(ValidationError):
+        SineWaveConfig(
+            amplitude=float("nan"),
+        )
