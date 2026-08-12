@@ -3,6 +3,7 @@
 import numpy as np
 from numpy.typing import NDArray
 
+from audio_hw_framework.analysis.exceptions import InvalidAudioSamplesError
 from audio_hw_framework.audio import AudioBuffer
 
 
@@ -21,7 +22,7 @@ def as_finite_float64_samples(
             np.isfinite(samples),
         )
     ):
-        raise ValueError(
+        raise InvalidAudioSamplesError(
             "Audio analysis requires finite sample values",
         )
 

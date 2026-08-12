@@ -10,6 +10,7 @@ from audio_hw_framework.analysis.detection import (
 from audio_hw_framework.analysis.exceptions import (
     AudioAnalysisError,
     EmptyAudioBufferError,
+    InvalidAudioSamplesError,
 )
 from audio_hw_framework.analysis.models import (
     DetectionAnalysisResult,
@@ -24,6 +25,7 @@ __all__ = [
     "DEFAULT_SILENCE_THRESHOLD",
     "DetectionAnalysisResult",
     "EmptyAudioBufferError",
+    "InvalidAudioSamplesError",
     "MetricAnalysisResult",
     "analyse_dc_offset",
     "analyse_peak",

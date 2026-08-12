@@ -7,3 +7,7 @@ class AudioAnalysisError(Exception):
 
 class EmptyAudioBufferError(AudioAnalysisError):
     """Raised when analysis is attempted on an empty audio buffer."""
+
+
+class InvalidAudioSamplesError(AudioAnalysisError):
+    """Raised when audio contains samples unsuitable for analysis."""

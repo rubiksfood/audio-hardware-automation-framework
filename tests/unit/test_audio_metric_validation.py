@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from audio_hw_framework.analysis.exceptions import InvalidAudioSamplesError
 from audio_hw_framework.audio import AudioBuffer
 from audio_hw_framework.configuration.thresholds import AudioMetricThresholds
 from audio_hw_framework.validation import validate_audio_metrics
@@ -227,7 +228,7 @@ def test_audio_metric_validation_rejects_non_finite_samples() -> None:
     )
 
     with pytest.raises(
-        ValueError,
+        InvalidAudioSamplesError,
         match="Audio analysis requires finite sample values",
     ):
         validate_audio_metrics(
