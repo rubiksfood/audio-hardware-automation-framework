@@ -1,5 +1,7 @@
 """Sample-domain silence and clipping detection."""
 
+from math import isfinite
+
 import numpy as np
 
 from audio_hw_framework.analysis._samples import as_finite_float64_samples
@@ -21,6 +23,11 @@ def detect_silence(
     if audio.frame_count == 0:
         raise EmptyAudioBufferError(
             "Silence detection requires at least one audio frame",
+        )
+
+    if not isfinite(threshold):
+        raise ValueError(
+            "Silence threshold must be finite",
         )
 
     if threshold < 0:
@@ -57,6 +64,11 @@ def detect_clipping(
     if audio.frame_count == 0:
         raise EmptyAudioBufferError(
             "Clipping detection requires at least one audio frame",
+        )
+
+    if not isfinite(threshold):
+        raise ValueError(
+            "Clipping threshold must be finite",
         )
 
     if threshold <= 0:

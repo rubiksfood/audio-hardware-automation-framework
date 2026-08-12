@@ -109,6 +109,44 @@ def test_detect_silence_rejects_negative_threshold() -> None:
         )
 
 
+def test_detect_silence_rejects_infinite_threshold() -> None:
+    audio = AudioBuffer(
+        samples=np.zeros(
+            (1, 1),
+            dtype=np.float32,
+        ),
+        sample_rate=48_000,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Silence threshold must be finite",
+    ):
+        detect_silence(
+            audio,
+            threshold=float("inf"),
+        )
+
+
+def test_detect_silence_rejects_nan_threshold() -> None:
+    audio = AudioBuffer(
+        samples=np.zeros(
+            (1, 1),
+            dtype=np.float32,
+        ),
+        sample_rate=48_000,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Silence threshold must be finite",
+    ):
+        detect_silence(
+            audio,
+            threshold=float("nan"),
+        )
+
+
 def test_detect_silence_rejects_empty_audio_buffer() -> None:
     audio = AudioBuffer(
         samples=np.empty(
@@ -236,6 +274,44 @@ def test_detect_clipping_rejects_non_positive_threshold() -> None:
         detect_clipping(
             audio,
             threshold=0.0,
+        )
+
+
+def test_detect_clipping_rejects_infinite_threshold() -> None:
+    audio = AudioBuffer(
+        samples=np.zeros(
+            (1, 1),
+            dtype=np.float32,
+        ),
+        sample_rate=48_000,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Clipping threshold must be finite",
+    ):
+        detect_clipping(
+            audio,
+            threshold=float("inf"),
+        )
+
+
+def test_detect_clipping_rejects_nan_threshold() -> None:
+    audio = AudioBuffer(
+        samples=np.zeros(
+            (1, 1),
+            dtype=np.float32,
+        ),
+        sample_rate=48_000,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Clipping threshold must be finite",
+    ):
+        detect_clipping(
+            audio,
+            threshold=float("nan"),
         )
 
 
