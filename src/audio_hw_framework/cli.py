@@ -29,7 +29,9 @@ from audio_hw_framework.recording import (
     record_configured_audio,
 )
 from audio_hw_framework.validation import (
+    AudioMetricValidationResult,
     StreamValidationResult,
+    validate_audio_metrics,
     validate_configured_stream,
 )
 
@@ -140,6 +142,73 @@ def build_playback_validation_table(
     table.add_row("Sample rate", f"{result.audio.sample_rate} Hz")
     table.add_row("Channels", str(result.audio.channel_count))
     table.add_row("Frames played", str(result.audio.frame_count))
+
+    return table
+
+
+def build_audio_analysis_table(
+    result: AudioMetricValidationResult,
+) -> Table:
+    """Build a human-readable sample-domain analysis summary."""
+
+    title = "Audio analysis passed" if result.passed else "Audio analysis failed"
+
+    table = Table(title=title)
+
+    table.add_column("Metric")
+    table.add_column("Overall")
+    table.add_column("Per channel")
+
+    table.add_row(
+        "RMS",
+        f"{result.rms.overall:.6f}",
+        ", ".join(f"{value:.6f}" for value in result.rms.per_channel),
+    )
+    table.add_row(
+        "Peak",
+        f"{result.peak.overall:.6f}",
+        ", ".join(f"{value:.6f}" for value in result.peak.per_channel),
+    )
+    table.add_row(
+        "DC offset",
+        f"{result.dc_offset.overall:.6f}",
+        ", ".join(f"{value:.6f}" for value in result.dc_offset.per_channel),
+    )
+    table.add_row(
+        "Silence detected",
+        str(result.silence.detected),
+        ", ".join(str(value) for value in result.silence.per_channel),
+    )
+    table.add_row(
+        "Clipping detected",
+        str(result.clipping.detected),
+        ", ".join(str(value) for value in result.clipping.per_channel),
+    )
+
+    return table
+
+
+def build_audio_analysis_failure_table(
+    result: AudioMetricValidationResult,
+) -> Table:
+    """Build a human-readable summary of failed metric thresholds."""
+
+    table = Table(title="Threshold failures")
+
+    table.add_column("Metric")
+    table.add_column("Channel", justify="right")
+    table.add_column("Actual")
+    table.add_column("Threshold")
+    table.add_column("Reason")
+
+    for failure in result.failures:
+        table.add_row(
+            failure.metric,
+            str(failure.channel + 1),
+            str(failure.actual),
+            f"{failure.threshold:.6f}",
+            failure.reason,
+        )
 
     return table
 
@@ -418,3 +487,114 @@ def validate_playback(
     console.print(
         build_playback_validation_table(result),
     )
+
+
+@app.command("analyse-audio")
+def analyse_audio(
+    config_path: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            "-c",
+            help="YAML configuration file containing audio metric thresholds.",
+        ),
+    ],
+    input_file: Annotated[
+        Path,
+        typer.Option(
+            "--input",
+            "-i",
+            help="WAV file to analyse.",
+        ),
+    ],
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Output audio analysis results as JSON.",
+        ),
+    ] = False,
+) -> None:
+    """Analyse a WAV file using configured sample-domain thresholds."""
+
+    try:
+        config = load_config(config_path)
+        audio = read_wav(input_file)
+
+        result = validate_audio_metrics(
+            audio,
+            config.thresholds,
+        )
+
+    except (
+        ConfigurationError,
+        WavFileError,
+    ) as exc:
+        error_console.print(
+            f"[bold red]Error:[/bold red] {exc}",
+        )
+        raise typer.Exit(code=2) from exc
+
+    if json_output:
+        payload = {
+            "status": ("passed" if result.passed else "failed"),
+            "input_file": str(input_file),
+            "audio": {
+                "sample_rate": audio.sample_rate,
+                "channels": audio.channel_count,
+                "frames": audio.frame_count,
+            },
+            "metrics": {
+                "rms": {
+                    "overall": result.rms.overall,
+                    "per_channel": result.rms.per_channel,
+                },
+                "peak": {
+                    "overall": result.peak.overall,
+                    "per_channel": result.peak.per_channel,
+                },
+                "dc_offset": {
+                    "overall": result.dc_offset.overall,
+                    "per_channel": result.dc_offset.per_channel,
+                },
+                "silence": {
+                    "detected": result.silence.detected,
+                    "per_channel": result.silence.per_channel,
+                },
+                "clipping": {
+                    "detected": result.clipping.detected,
+                    "per_channel": result.clipping.per_channel,
+                },
+            },
+            "failures": [
+                {
+                    "metric": failure.metric,
+                    "channel": failure.channel,
+                    "actual": failure.actual,
+                    "threshold": failure.threshold,
+                    "reason": failure.reason,
+                }
+                for failure in result.failures
+            ],
+        }
+
+        typer.echo(
+            json.dumps(
+                payload,
+                indent=2,
+            )
+        )
+
+    else:
+        console.print(
+            build_audio_analysis_table(result),
+        )
+
+        if result.failures:
+            console.print()
+            console.print(
+                build_audio_analysis_failure_table(result),
+            )
+
+    if not result.passed:
+        raise typer.Exit(code=1)
