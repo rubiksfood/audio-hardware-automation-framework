@@ -208,8 +208,6 @@ Hardware validation commands require exactly one matching device. `analyse-audio
 
 ---
 
----
-
 ### Stream Validation
 
 Configuration-driven validation supports:
@@ -314,6 +312,8 @@ thresholds:
 
 Phase 4 analysis operates exclusively on framework-owned `AudioBuffer` instances.
 
+Default detection thresholds assume normalized floating-point audio. When analysing raw integer `AudioBuffer` data directly, threshold values are interpreted in the buffer's native sample units and must be configured accordingly.
+
 It is sample-domain analysis only and does not currently measure frequency response, distortion, signal-to-noise ratio, inter-sample peaks, latency or end-to-end signal-path correctness.
 
 See [`docs/signal-generation-analysis.md`](docs/signal-generation-analysis.md) for metric definitions, threshold behaviour, CLI usage and analysis limitations.
@@ -369,7 +369,9 @@ The project includes:
 - DC-offset analysis tests
 - Silence and clipping detection tests
 - Metric-threshold validation tests
-- CLI tests
+- Non-finite sample and threshold validation tests
+- Analysis failure-path tests
+- CLI analysis tests
 
 GitHub Actions runs hardware-independent tests, linting, formatting checks, type checking, and coverage reporting on Ubuntu.
 
@@ -403,6 +405,8 @@ This enables more reliable device matching on systems where the same physical in
 audio-hardware-automation-framework/
 │
 ├── configs/
+├── configs/
+│   ├── example_analysis.yaml
 │   ├── example_duplex_device.yaml
 │   │
 │   ├── scarlett_windows_mme_input.yaml
@@ -442,14 +446,20 @@ audio-hardware-automation-framework/
 │       ├── phase-2-stream-validation.png
 │       ├── phase-3-playback-validation.png
 │       ├── phase-3-pytest-coverage.png
-│       └── phase-3-recording-validation.png
+│       ├── phase-3-recording-validation.png
+│       ├── phase-4-analysis-json.png
+│       ├── phase-4-analysis-sine-wave.png
+│       ├── phase-4-pytest-coverage.png
+│       └── phase-4-threshold-failure.png
 │
 ├── src/
 │   └── audio_hw_framework/
 │       ├── analysis/
 │       │   ├── __init__.py
+│       │   ├── _samples.py
 │       │   ├── dc_offset.py
 │       │   ├── detection.py
+│       │   ├── exceptions.py
 │       │   ├── models.py
 │       │   ├── peak.py
 │       │   └── rms.py
@@ -503,6 +513,7 @@ audio-hardware-automation-framework/
 │       ├── __init__.py
 │       ├── cli_helpers.py
 │       ├── test_analysis_models.py
+│       ├── test_analysis_non_finite.py
 │       ├── test_audio_buffer.py
 │       ├── test_audio_metric_validation.py
 │       ├── test_backend.py
@@ -838,6 +849,23 @@ Explains:
 
 ![pytest coverage](docs/images/phase-3-pytest-coverage.png)
 
+### Phase 4
+
+#### Known sine-wave analysis
+
+![known sine-wave analysis](docs/images/phase-4-analysis-sine-wave.png)
+
+#### Structured JSON analysis
+
+![structured JSON analysis](docs/images/phase-4-analysis-json.png)
+
+#### Threshold failure reporting
+
+![threshold failure reporting](docs/images/phase-4-threshold-failure.png)
+
+#### pytest coverage
+
+![pytest coverage](docs/images/phase-4-pytest-coverage.png)
 
 ---
 
@@ -899,6 +927,8 @@ Explains:
 - Overall and per-channel metrics
 - Configurable metric thresholds
 - Structured threshold failure reasons
+- Defensive validation of empty and non-finite analysis inputs
+- Validation of non-finite signal-generation and detection parameters
 - `analyse-audio` CLI command
 - Human-readable and JSON analysis reporting
 - Documented sample-domain analysis limitations
@@ -948,6 +978,7 @@ This project demonstrates:
 - Layered application architecture
 - Backend-independent workflow orchestration
 - Framework-owned exception translation
+- Domain-specific analysis exception design
 - Deterministic test doubles
 - Stream lifecycle validation
 - Finite audio execution testing
@@ -960,6 +991,8 @@ This project demonstrates:
 - Deterministic synthetic test-signal generation
 - Numerical audio-analysis implementation
 - Boundary-value testing for audio metrics
+- Non-finite numerical input validation
+- Defensive error-path testing
 - Per-channel validation design
 - Configuration-driven metric thresholds
 - Structured QA failure reporting
