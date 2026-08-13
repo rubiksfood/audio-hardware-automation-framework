@@ -1,14 +1,12 @@
 device:
   name_contains: "Scarlett"
-  minimum_input_channels: 2
-  minimum_output_channels: 2
 
 stream:
   sample_rate: 48000
   input_channels: 2
   output_channels: 2
   block_size: null
-  dtype: float32
+  dtype: "float32"
 
 execution:
   duration_seconds: 1.0
@@ -16,10 +14,10 @@ execution:
   output_file: null
 
 thresholds:
-  minimum_rms: null
-  maximum_rms: null
-  maximum_peak: null
-  maximum_abs_dc_offset: null
+  minimum_rms: 0.01
+  maximum_rms: 0.8
+  maximum_peak: 0.95
+  maximum_abs_dc_offset: 0.02
   silence_threshold: 0.0001
   clipping_threshold: 1.0
   fail_on_silence: true

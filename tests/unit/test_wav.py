@@ -139,6 +139,74 @@ def test_normalises_unsigned_integer_samples_when_writing(
     )
 
 
+def test_normalises_int8_samples_when_writing(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "int8.wav"
+
+    audio = AudioBuffer(
+        samples=np.array(
+            [
+                [-128],
+                [0],
+                [127],
+            ],
+            dtype=np.int8,
+        ),
+        sample_rate=48_000,
+    )
+
+    write_wav(path, audio)
+
+    result = read_wav(path)
+
+    np.testing.assert_allclose(
+        np.asarray(result.samples[:, 0], dtype=np.float32),
+        np.array(
+            [
+                -1.0,
+                0.0,
+                127 / 128,
+            ],
+            dtype=np.float32,
+        ),
+    )
+
+
+def test_normalises_int32_samples_when_writing(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "int32.wav"
+
+    audio = AudioBuffer(
+        samples=np.array(
+            [
+                [-2_147_483_648],
+                [0],
+                [2_147_483_647],
+            ],
+            dtype=np.int32,
+        ),
+        sample_rate=48_000,
+    )
+
+    write_wav(path, audio)
+
+    result = read_wav(path)
+
+    np.testing.assert_allclose(
+        np.asarray(result.samples[:, 0], dtype=np.float32),
+        np.array(
+            [
+                -1.0,
+                0.0,
+                2_147_483_647 / 2_147_483_648,
+            ],
+            dtype=np.float32,
+        ),
+    )
+
+
 def test_write_wav_creates_parent_directories(
     tmp_path: Path,
 ) -> None:
@@ -203,5 +271,37 @@ def test_write_wav_rejects_unsupported_sample_dtype(
     with pytest.raises(
         WavFileError,
         match="Unsupported WAV sample dtype",
+    ):
+        write_wav(path, audio)
+
+
+def test_write_wav_translates_file_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "test.wav"
+
+    audio = AudioBuffer(
+        samples=np.zeros(
+            (1, 1),
+            dtype=np.float32,
+        ),
+        sample_rate=48_000,
+    )
+
+    def fail_write(
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        raise OSError("Disk write failed")
+
+    monkeypatch.setattr(
+        "audio_hw_framework.audio.wav.sf.write",
+        fail_write,
+    )
+
+    with pytest.raises(
+        WavFileError,
+        match="Could not write WAV file",
     ):
         write_wav(path, audio)

@@ -10,7 +10,7 @@ This project demonstrates QA automation, hardware testing, configuration-driven 
 
 ## Project Status
 
-**Phase 3 complete — recording and playback foundations**
+**Phase 4 complete — signal generation and sample-domain analysis**
 
 Completed capabilities include:
 
@@ -23,11 +23,18 @@ Completed capabilities include:
 - Finite-buffer playback
 - Framework-owned audio buffers
 - WAV import and export
+- Deterministic sine-wave and silence generation
+- RMS, peak and DC offset analysis
+- Silence and clipping detection
+- Per-channel sample-domain metrics
+- Configuration-driven metric thresholds
+- Structured threshold failure reasons
+- WAV analysis through the `analyse-audio` CLI command
 - Backend-independent recording and playback services
 - Rich CLI and structured JSON reporting
 - Windows and Linux hardware validation
 
-**Current development:** later-phase signal generation, analysis, loopback, latency, and stability validation.
+**Current development:** later-phase loopback, latency, stream-health and stability validation.
 
 See the [Roadmap](#roadmap) for planned development.
 
@@ -43,9 +50,9 @@ The framework aims to provide a reusable foundation for automated testing of aud
 - Audio drivers
 - Recording and playback systems
 
-The current foundation includes reliable device discovery, configuration management, hardware identification, stream-capability validation, finite recording, finite playback, and WAV file handling.
+The current foundation includes reliable device discovery, configuration management, hardware identification, stream-capability validation, finite recording and playback, WAV handling, deterministic signal generation, sample-domain analysis, and configuration-driven metric validation.
 
-Future releases will add signal generation, loopback testing, measured sample-rate verification, audio quality analysis, latency observation, and stability testing.
+Future releases will build on the current signal and analysis foundation with loopback testing, measured sample-rate verification, deeper audio-quality measurements, latency observation, and stability testing.
 
 ---
 
@@ -172,13 +179,32 @@ audio-hw validate-playback \
   --json
 ```
 
-Validation commands require exactly one matching device.
+Analyse a WAV file using configured sample-domain thresholds:
+
+```bash
+audio-hw analyse-audio \
+  --config configs/example_analysis.yaml \
+  --input recordings/test.wav
+```
+
+Output analysis results as JSON:
+
+```bash
+audio-hw analyse-audio \
+  --config configs/example_analysis.yaml \
+  --input recordings/test.wav \
+  --json
+```
 
 `validate-stream` checks whether PortAudio accepts the requested stream settings and whether the requested stream can be constructed and closed safely.
 
 `validate-recording` performs a finite recording using the configured duration and timeout. If `execution.output_file` is configured, the captured audio is exported as a WAV file.
 
 `validate-playback` reads a WAV file, verifies that its sample rate and channel count match the configured output stream, and performs finite playback through the selected device.
+
+`analyse-audio` reads the supplied WAV file into a framework-owned `AudioBuffer`, calculates RMS, peak and DC offset, performs silence and clipping detection, and applies configured thresholds per channel.
+
+Hardware validation commands require exactly one matching device. `analyse-audio` is file-based and does not perform device discovery or matching.
 
 ---
 
@@ -242,6 +268,58 @@ Phase 3 validates execution and data flow only. It does not yet make claims abou
 
 ---
 
+### Signal Generation and Sample-Domain Analysis
+
+Phase 4 adds deterministic signal generation and basic audio analysis.
+
+Signal generation supports:
+
+- Sine waves
+- Silence
+- Configurable sample rate
+- Configurable duration
+- Configurable channel count
+- Configurable sine frequency and amplitude
+- Framework-owned `AudioBuffer` output
+- Deterministic, hardware-independent execution
+
+Sample-domain analysis supports:
+
+- RMS level
+- Absolute peak level
+- DC offset
+- Silence detection
+- Clipping detection
+- Overall metrics
+- Per-channel metrics
+- Configuration-driven validation thresholds
+- Structured per-channel failure reasons
+- Human-readable and JSON CLI reporting
+
+Example threshold configuration:
+
+```yaml
+thresholds:
+  minimum_rms: 0.01
+  maximum_rms: 0.8
+  maximum_peak: 0.95
+  maximum_abs_dc_offset: 0.02
+  silence_threshold: 0.0001
+  clipping_threshold: 1.0
+  fail_on_silence: true
+  fail_on_clipping: true
+```
+
+Phase 4 analysis operates exclusively on framework-owned `AudioBuffer` instances.
+
+Default detection thresholds assume normalized floating-point audio. When analysing raw integer `AudioBuffer` data directly, threshold values are interpreted in the buffer's native sample units and must be configured accordingly.
+
+It is sample-domain analysis only and does not currently measure frequency response, distortion, signal-to-noise ratio, inter-sample peaks, latency or end-to-end signal-path correctness.
+
+See [`docs/signal-generation-analysis.md`](docs/signal-generation-analysis.md) for metric definitions, threshold behaviour, CLI usage and analysis limitations.
+
+---
+
 ### Structured Device Models
 
 The framework uses strongly typed Pydantic models for:
@@ -249,6 +327,8 @@ The framework uses strongly typed Pydantic models for:
 - Audio devices
 - Device matching rules
 - Stream configuration
+- Signal-generation configuration
+- Metric-threshold configuration
 - Framework configuration
 
 This provides validation and predictable configuration handling.
@@ -282,7 +362,16 @@ The project includes:
 - WAV import/export tests
 - Recording-service orchestration tests
 - Playback-service orchestration tests
-- CLI tests
+- Signal-generation model tests
+- Deterministic sine and silence generation tests
+- RMS analysis tests
+- Peak analysis tests
+- DC-offset analysis tests
+- Silence and clipping detection tests
+- Metric-threshold validation tests
+- Non-finite sample and threshold validation tests
+- Analysis failure-path tests
+- CLI analysis tests
 
 GitHub Actions runs hardware-independent tests, linting, formatting checks, type checking, and coverage reporting on Ubuntu.
 
@@ -316,6 +405,8 @@ This enables more reliable device matching on systems where the same physical in
 audio-hardware-automation-framework/
 │
 ├── configs/
+├── configs/
+│   ├── example_analysis.yaml
 │   ├── example_duplex_device.yaml
 │   │
 │   ├── scarlett_windows_mme_input.yaml
@@ -342,6 +433,7 @@ audio-hardware-automation-framework/
 │   ├── discovery.md
 │   ├── platform-support.md
 │   ├── recording-playback-validation.md
+│   ├── signal-generation-analysis.md
 │   ├── stream-validation.md
 │   └── images/
 │       ├── phase-1-github-actions-passing.png
@@ -354,10 +446,24 @@ audio-hardware-automation-framework/
 │       ├── phase-2-stream-validation.png
 │       ├── phase-3-playback-validation.png
 │       ├── phase-3-pytest-coverage.png
-│       └── phase-3-recording-validation.png
+│       ├── phase-3-recording-validation.png
+│       ├── phase-4-analysis-json.png
+│       ├── phase-4-analysis-sine-wave.png
+│       ├── phase-4-pytest-coverage.png
+│       └── phase-4-threshold-failure.png
 │
 ├── src/
 │   └── audio_hw_framework/
+│       ├── analysis/
+│       │   ├── __init__.py
+│       │   ├── _samples.py
+│       │   ├── dc_offset.py
+│       │   ├── detection.py
+│       │   ├── exceptions.py
+│       │   ├── models.py
+│       │   ├── peak.py
+│       │   └── rms.py
+│       │
 │       ├── audio/
 │       │   ├── __init__.py
 │       │   ├── audio_buffer.py
@@ -371,7 +477,8 @@ audio-hardware-automation-framework/
 │       │
 │       ├── configuration/
 │       │   ├── __init__.py
-│       │   └── loader.py
+│       │   ├── loader.py
+│       │   └── thresholds.py
 │       │
 │       ├── device/
 │       │   ├── __init__.py
@@ -386,8 +493,14 @@ audio-hardware-automation-framework/
 │       │   ├── __init__.py
 │       │   └── service.py
 │       │
+│       ├── signal/
+│       │   ├── __init__.py
+│       │   ├── generator.py
+│       │   └── models.py
+│       │
 │       ├── validation/
 │       │   ├── __init__.py
+│       │   ├── audio_metrics.py
 │       │   └── service.py
 │       │
 │       ├── __init__.py
@@ -395,16 +508,33 @@ audio-hardware-automation-framework/
 │       └── cli.py
 │
 ├── tests/
+│   ├── __init__.py
 │   └── unit/
+│       ├── __init__.py
+│       ├── cli_helpers.py
+│       ├── test_analysis_models.py
+│       ├── test_analysis_non_finite.py
 │       ├── test_audio_buffer.py
+│       ├── test_audio_metric_validation.py
 │       ├── test_backend.py
-│       ├── test_cli.py
+│       ├── test_cli_analysis.py
+│       ├── test_cli_app.py
+│       ├── test_cli_inspect_devices.py
+│       ├── test_cli_playback.py
+│       ├── test_cli_recording.py
+│       ├── test_cli_stream_validation.py
 │       ├── test_configuration.py
+│       ├── test_dc_offset.py
+│       ├── test_detection.py
 │       ├── test_device_matching.py
 │       ├── test_models.py
 │       ├── test_package.py
+│       ├── test_peak.py
 │       ├── test_playback_service.py
 │       ├── test_recording_service.py
+│       ├── test_rms.py
+│       ├── test_signal_generator.py
+│       ├── test_signal_models.py
 │       ├── test_sounddevice_backend.py
 │       ├── test_validation_service.py
 │       └── test_wav.py
@@ -534,6 +664,21 @@ stream:
   output_channels: 0
   block_size: null
   dtype: "float32"
+
+execution:
+  duration_seconds: 1.0
+  timeout_seconds: 5.0
+  output_file: null
+
+thresholds:
+  minimum_rms: null
+  maximum_rms: null
+  maximum_peak: null
+  maximum_abs_dc_offset: null
+  silence_threshold: 0.0001
+  clipping_threshold: 1.0
+  fail_on_silence: true
+  fail_on_clipping: true
 ```
 
 ---
@@ -632,6 +777,24 @@ Explains:
 * Failure handling
 * Validation scope and limitations
 
+### Signal Generation and Sample-Domain Analysis
+
+```text
+docs/signal-generation-analysis.md
+```
+
+Explains:
+
+- Deterministic sine-wave and silence generation
+- RMS, peak and DC-offset calculations
+- Silence and clipping detection
+- Per-channel metric behaviour
+- Configurable validation thresholds
+- Structured threshold failures
+- `analyse-audio` CLI and JSON output
+- Exit codes
+- Sample-domain analysis limitations
+
 ---
 
 ## Evidence
@@ -686,6 +849,23 @@ Explains:
 
 ![pytest coverage](docs/images/phase-3-pytest-coverage.png)
 
+### Phase 4
+
+#### Known sine-wave analysis
+
+![known sine-wave analysis](docs/images/phase-4-analysis-sine-wave.png)
+
+#### Structured JSON analysis
+
+![structured JSON analysis](docs/images/phase-4-analysis-json.png)
+
+#### Threshold failure reporting
+
+![threshold failure reporting](docs/images/phase-4-threshold-failure.png)
+
+#### pytest coverage
+
+![pytest coverage](docs/images/phase-4-pytest-coverage.png)
 
 ---
 
@@ -731,9 +911,30 @@ Explains:
 - `validate-playback` CLI command
 - Human-readable and JSON execution reporting
 
+### Phase 4 — Signal generation and basic audio analysis
+
+**Complete**
+
+- Deterministic sine-wave generation
+- Deterministic silence generation
+- Typed signal-generation configuration
+- Framework-owned generated audio buffers
+- RMS level analysis
+- Peak level analysis
+- DC offset analysis
+- Silence detection
+- Clipping detection
+- Overall and per-channel metrics
+- Configurable metric thresholds
+- Structured threshold failure reasons
+- Defensive validation of empty and non-finite analysis inputs
+- Validation of non-finite signal-generation and detection parameters
+- `analyse-audio` CLI command
+- Human-readable and JSON analysis reporting
+- Documented sample-domain analysis limitations
+
 ### Later phases
 
-- Signal generation and analysis
 - Loopback validation
 - Latency and stream-health measurement
 - Stability and recovery testing
@@ -777,6 +978,7 @@ This project demonstrates:
 - Layered application architecture
 - Backend-independent workflow orchestration
 - Framework-owned exception translation
+- Domain-specific analysis exception design
 - Deterministic test doubles
 - Stream lifecycle validation
 - Finite audio execution testing
@@ -786,6 +988,15 @@ This project demonstrates:
 - Timeout, overflow, and underflow handling
 - Backend contract enforcement
 - Recording and playback service orchestration
+- Deterministic synthetic test-signal generation
+- Numerical audio-analysis implementation
+- Boundary-value testing for audio metrics
+- Non-finite numerical input validation
+- Defensive error-path testing
+- Per-channel validation design
+- Configuration-driven metric thresholds
+- Structured QA failure reporting
+- Sample-domain analysis and limitation documentation
 - Human-readable and machine-readable reporting
 
 ---

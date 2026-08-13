@@ -2,4 +2,4 @@ import audio_hw_framework
 
 
 def test_package_has_version() -> None:
-    assert audio_hw_framework.__version__ == "0.3.0"
+    assert audio_hw_framework.__version__ == "0.4.0"

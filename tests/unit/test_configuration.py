@@ -77,3 +77,43 @@ execution:
     assert config.execution.duration_seconds == 2.5
     assert config.execution.timeout_seconds == 10.0
     assert config.execution.output_file == Path("recordings/test.wav")
+
+
+def test_load_config_with_audio_metric_thresholds(
+    tmp_path: Path,
+) -> None:
+    config_file = tmp_path / "config.yaml"
+
+    config_file.write_text(
+        """
+device:
+  name_contains: "Scarlett"
+
+stream:
+  sample_rate: 48000
+  input_channels: 2
+  output_channels: 2
+
+thresholds:
+  minimum_rms: 0.01
+  maximum_rms: 0.8
+  maximum_peak: 0.95
+  maximum_abs_dc_offset: 0.02
+  silence_threshold: 0.0001
+  clipping_threshold: 1.0
+  fail_on_silence: true
+  fail_on_clipping: true
+""",
+        encoding="utf-8",
+    )
+
+    config = load_config(config_file)
+
+    assert config.thresholds.minimum_rms == 0.01
+    assert config.thresholds.maximum_rms == 0.8
+    assert config.thresholds.maximum_peak == 0.95
+    assert config.thresholds.maximum_abs_dc_offset == 0.02
+    assert config.thresholds.silence_threshold == 0.0001
+    assert config.thresholds.clipping_threshold == 1.0
+    assert config.thresholds.fail_on_silence is True
+    assert config.thresholds.fail_on_clipping is True
