@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from audio_hw_framework.configuration.loopback import LoopbackValidationConfig
 from audio_hw_framework.configuration.thresholds import AudioMetricThresholds
 from audio_hw_framework.device.models import (
     AudioDevice,
@@ -284,3 +285,210 @@ def test_framework_config_uses_default_metric_thresholds() -> None:
     )
 
     assert config.thresholds == AudioMetricThresholds()
+
+
+def test_loopback_validation_config_uses_defaults() -> None:
+    config = LoopbackValidationConfig()
+
+    assert config.output_channel == 0
+    assert config.input_channel == 0
+    assert config.signal_duration_seconds == 1.0
+    assert config.frequency_hz == 1_000.0
+    assert config.amplitude == 0.25
+    assert config.frequency_tolerance_hz == 5.0
+    assert config.padding_seconds == 0.1
+
+
+def test_loopback_validation_config_accepts_valid_values() -> None:
+    config = LoopbackValidationConfig(
+        output_channel=1,
+        input_channel=1,
+        signal_duration_seconds=2.0,
+        frequency_hz=440.0,
+        amplitude=0.5,
+        frequency_tolerance_hz=2.0,
+        padding_seconds=0.25,
+    )
+
+    assert config.output_channel == 1
+    assert config.input_channel == 1
+    assert config.signal_duration_seconds == 2.0
+    assert config.frequency_hz == 440.0
+    assert config.amplitude == 0.5
+    assert config.frequency_tolerance_hz == 2.0
+    assert config.padding_seconds == 0.25
+
+
+def test_loopback_validation_config_rejects_negative_input_channel() -> None:
+    with pytest.raises(ValidationError):
+        LoopbackValidationConfig(
+            input_channel=-1,
+        )
+
+
+def test_loopback_validation_config_rejects_negative_output_channel() -> None:
+    with pytest.raises(ValidationError):
+        LoopbackValidationConfig(
+            output_channel=-1,
+        )
+
+
+def test_loopback_validation_config_rejects_zero_signal_duration() -> None:
+    with pytest.raises(ValidationError):
+        LoopbackValidationConfig(
+            signal_duration_seconds=0.0,
+        )
+
+
+def test_loopback_validation_config_rejects_zero_amplitude() -> None:
+    with pytest.raises(ValidationError):
+        LoopbackValidationConfig(
+            amplitude=0.0,
+        )
+
+
+def test_loopback_validation_config_rejects_amplitude_above_one() -> None:
+    with pytest.raises(ValidationError):
+        LoopbackValidationConfig(
+            amplitude=1.01,
+        )
+
+
+def test_loopback_validation_config_accepts_zero_frequency_tolerance() -> None:
+    config = LoopbackValidationConfig(
+        frequency_tolerance_hz=0.0,
+    )
+
+    assert config.frequency_tolerance_hz == 0.0
+
+
+def test_loopback_validation_config_accepts_zero_padding() -> None:
+    config = LoopbackValidationConfig(
+        padding_seconds=0.0,
+    )
+
+    assert config.padding_seconds == 0.0
+
+
+def test_framework_config_does_not_enable_loopback_by_default() -> None:
+    config = FrameworkConfig(
+        device=DeviceMatchConfig(
+            name_contains="Scarlett",
+        ),
+        stream=StreamConfig(),
+    )
+
+    assert config.loopback is None
+
+
+def test_framework_config_accepts_loopback_with_duplex_stream() -> None:
+    loopback = LoopbackValidationConfig(
+        output_channel=1,
+        input_channel=1,
+    )
+
+    config = FrameworkConfig(
+        device=DeviceMatchConfig(
+            name_contains="Scarlett",
+        ),
+        stream=StreamConfig(
+            sample_rate=48_000,
+            input_channels=2,
+            output_channels=2,
+        ),
+        loopback=loopback,
+    )
+
+    assert config.loopback == loopback
+
+
+def test_framework_config_rejects_loopback_without_input_channels() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="Loopback validation requires a duplex stream",
+    ):
+        FrameworkConfig(
+            device=DeviceMatchConfig(
+                name_contains="Scarlett",
+            ),
+            stream=StreamConfig(
+                input_channels=0,
+                output_channels=2,
+            ),
+            loopback=LoopbackValidationConfig(),
+        )
+
+
+def test_framework_config_rejects_loopback_without_output_channels() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="Loopback validation requires a duplex stream",
+    ):
+        FrameworkConfig(
+            device=DeviceMatchConfig(
+                name_contains="Scarlett",
+            ),
+            stream=StreamConfig(
+                input_channels=2,
+                output_channels=0,
+            ),
+            loopback=LoopbackValidationConfig(),
+        )
+
+
+def test_framework_config_rejects_out_of_range_loopback_input_channel() -> None:
+    with pytest.raises(
+        ValidationError,
+        match=r"loopback\.input_channel must be less than stream\.input_channels",
+    ):
+        FrameworkConfig(
+            device=DeviceMatchConfig(
+                name_contains="Scarlett",
+            ),
+            stream=StreamConfig(
+                input_channels=2,
+                output_channels=2,
+            ),
+            loopback=LoopbackValidationConfig(
+                input_channel=2,
+            ),
+        )
+
+
+def test_framework_config_rejects_out_of_range_loopback_output_channel() -> None:
+    with pytest.raises(
+        ValidationError,
+        match=r"loopback\.output_channel must be less than stream\.output_channels",
+    ):
+        FrameworkConfig(
+            device=DeviceMatchConfig(
+                name_contains="Scarlett",
+            ),
+            stream=StreamConfig(
+                input_channels=2,
+                output_channels=2,
+            ),
+            loopback=LoopbackValidationConfig(
+                output_channel=2,
+            ),
+        )
+
+
+def test_framework_config_rejects_loopback_frequency_at_nyquist() -> None:
+    with pytest.raises(
+        ValidationError,
+        match=r"loopback\.frequency_hz must be less than half the stream sample rate",
+    ):
+        FrameworkConfig(
+            device=DeviceMatchConfig(
+                name_contains="Scarlett",
+            ),
+            stream=StreamConfig(
+                sample_rate=48_000,
+                input_channels=2,
+                output_channels=2,
+            ),
+            loopback=LoopbackValidationConfig(
+                frequency_hz=24_000.0,
+            ),
+        )

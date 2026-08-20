@@ -117,3 +117,19 @@ thresholds:
     assert config.thresholds.clipping_threshold == 1.0
     assert config.thresholds.fail_on_silence is True
     assert config.thresholds.fail_on_clipping is True
+
+
+def test_load_loopback_configuration() -> None:
+    config = load_config(
+        Path("configs/example_loopback.yaml"),
+    )
+
+    assert config.loopback is not None
+
+    assert config.loopback.output_channel == 0
+    assert config.loopback.input_channel == 0
+    assert config.loopback.signal_duration_seconds == 1.0
+    assert config.loopback.frequency_hz == 1_000.0
+    assert config.loopback.amplitude == 0.25
+    assert config.loopback.frequency_tolerance_hz == 5.0
+    assert config.loopback.padding_seconds == 0.1
