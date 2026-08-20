@@ -11,21 +11,8 @@ from pytest import MonkeyPatch
 from audio_hw_framework.audio import AudioBuffer
 from audio_hw_framework.backend.base import AudioBackendError
 from audio_hw_framework.backend.sounddevice_backend import SoundDeviceBackend
-from audio_hw_framework.device.models import AudioDevice, StreamConfig
-
-
-def create_test_device() -> AudioDevice:
-    """Create the duplex device used by PortAudio backend tests."""
-
-    return AudioDevice(
-        index=0,
-        name="Scarlett",
-        host_api_index=0,
-        host_api_name="WASAPI",
-        max_input_channels=2,
-        max_output_channels=2,
-        default_sample_rate=48_000,
-    )
+from audio_hw_framework.device.models import StreamConfig
+from tests.unit.sounddevice_backend_helpers import create_test_device
 
 
 def create_playback_audio(
