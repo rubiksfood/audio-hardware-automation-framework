@@ -13,6 +13,7 @@ from audio_hw_framework.device.models import AudioDevice, StreamConfig
 StreamKey = tuple[int, int, int, int, int | None, str]
 RecordingKey = tuple[int, int, int, int, str]
 PlaybackKey = tuple[int, int, int, str]
+DuplexKey = tuple[int, int, int, int, int, str]
 
 
 class FakeAudioBackend(AudioBackend):
@@ -26,6 +27,8 @@ class FakeAudioBackend(AudioBackend):
         recording_samples: AudioBuffer | None = None,
         recording_failures: set[RecordingKey] | None = None,
         playback_failures: set[PlaybackKey] | None = None,
+        duplex_samples: AudioBuffer | None = None,
+        duplex_failures: set[DuplexKey] | None = None,
     ) -> None:
         self._devices = list(devices) if devices is not None else []
 
@@ -38,12 +41,15 @@ class FakeAudioBackend(AudioBackend):
         )
 
         self._recording_samples = recording_samples
+        self._duplex_samples = duplex_samples
 
         self._recording_failures = (
             set(recording_failures) if recording_failures is not None else set()
         )
 
         self._playback_failures = set(playback_failures) if playback_failures is not None else set()
+
+        self._duplex_failures = set(duplex_failures) if duplex_failures is not None else set()
 
     @property
     def info(self) -> BackendInfo:
@@ -171,6 +177,78 @@ class FakeAudioBackend(AudioBackend):
                 "Playback audio channel count does not match the stream output channels",
             )
 
+    def duplex(
+        self,
+        device: AudioDevice,
+        config: StreamConfig,
+        audio: AudioBuffer,
+        *,
+        timeout_seconds: float,
+    ) -> AudioBuffer:
+        """Return deterministic capture data for finite duplex execution."""
+
+        duplex_key = self._create_duplex_key(
+            device,
+            config,
+            audio,
+        )
+
+        if duplex_key in self._duplex_failures:
+            raise AudioBackendError(
+                f"Fake backend duplex execution failed for device index {device.index}",
+            )
+
+        if config.input_channels == 0:
+            raise AudioBackendError(
+                "Cannot perform duplex execution with no input channels",
+            )
+
+        if config.output_channels == 0:
+            raise AudioBackendError(
+                "Cannot perform duplex execution with no output channels",
+            )
+
+        if audio.sample_rate != config.sample_rate:
+            raise AudioBackendError(
+                "Duplex playback audio sample rate does not match the stream sample rate",
+            )
+
+        if audio.channel_count != config.output_channels:
+            raise AudioBackendError(
+                "Duplex playback audio channel count does not match the stream output channels",
+            )
+
+        if self._duplex_samples is None:
+            samples = np.zeros(
+                (audio.frame_count, config.input_channels),
+                dtype=config.dtype.value,
+            )
+
+            return AudioBuffer(
+                samples=samples,
+                sample_rate=config.sample_rate,
+            )
+
+        if self._duplex_samples.sample_rate != config.sample_rate:
+            raise AudioBackendError(
+                "Configured duplex samples do not match the stream sample rate",
+            )
+
+        if self._duplex_samples.channel_count != config.input_channels:
+            raise AudioBackendError(
+                "Configured duplex samples do not match the stream input channels",
+            )
+
+        if self._duplex_samples.frame_count < audio.frame_count:
+            raise AudioBackendError(
+                "Configured duplex samples contain fewer frames than playback audio",
+            )
+
+        return AudioBuffer(
+            samples=self._duplex_samples.samples[: audio.frame_count],
+            sample_rate=self._duplex_samples.sample_rate,
+        )
+
     @staticmethod
     def _create_stream_key(
         device: AudioDevice,
@@ -208,5 +286,20 @@ class FakeAudioBackend(AudioBackend):
             device.index,
             config.sample_rate,
             config.output_channels,
+            config.dtype.value,
+        )
+
+    @staticmethod
+    def _create_duplex_key(
+        device: AudioDevice,
+        config: StreamConfig,
+        audio: AudioBuffer,
+    ) -> DuplexKey:
+        return (
+            device.index,
+            config.sample_rate,
+            config.input_channels,
+            config.output_channels,
+            audio.frame_count,
             config.dtype.value,
         )
