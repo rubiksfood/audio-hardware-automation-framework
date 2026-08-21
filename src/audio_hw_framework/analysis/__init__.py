@@ -1,5 +1,9 @@
 """Sample-domain audio analysis."""
 
+from audio_hw_framework.analysis.alignment import (
+    SignalAlignmentResult,
+    align_captured_signal,
+)
 from audio_hw_framework.analysis.dc_offset import analyse_dc_offset
 from audio_hw_framework.analysis.detection import (
     DEFAULT_CLIPPING_THRESHOLD,
@@ -32,4 +36,6 @@ __all__ = [
     "analyse_rms",
     "detect_clipping",
     "detect_silence",
+    "SignalAlignmentResult",
+    "align_captured_signal",
 ]
