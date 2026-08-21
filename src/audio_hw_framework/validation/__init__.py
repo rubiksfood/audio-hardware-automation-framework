@@ -10,6 +10,9 @@ from audio_hw_framework.validation.loopback_models import (
     LoopbackValidationFailure,
     LoopbackValidationResult,
 )
+from audio_hw_framework.validation.loopback_service import (
+    validate_configured_loopback,
+)
 from audio_hw_framework.validation.service import (
     StreamValidationResult,
     validate_configured_stream,
@@ -24,4 +27,5 @@ __all__ = [
     "StreamValidationResult",
     "validate_audio_metrics",
     "validate_configured_stream",
+    "validate_configured_loopback",
 ]

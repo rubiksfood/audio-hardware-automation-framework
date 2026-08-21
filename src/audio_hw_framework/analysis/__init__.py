@@ -16,6 +16,9 @@ from audio_hw_framework.analysis.exceptions import (
     EmptyAudioBufferError,
     InvalidAudioSamplesError,
 )
+from audio_hw_framework.analysis.frequency import (
+    measure_dominant_frequency,
+)
 from audio_hw_framework.analysis.models import (
     DetectionAnalysisResult,
     MetricAnalysisResult,
@@ -38,4 +41,5 @@ __all__ = [
     "detect_silence",
     "SignalAlignmentResult",
     "align_captured_signal",
+    "measure_dominant_frequency",
 ]
