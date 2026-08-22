@@ -29,6 +29,12 @@ from audio_hw_framework.recording import (
     RecordingResult,
     record_configured_audio,
 )
+from audio_hw_framework.reporting import (
+    LoopbackEvidencePaths,
+    LoopbackReportingError,
+    build_loopback_report,
+    save_loopback_evidence,
+)
 from audio_hw_framework.validation import (
     AudioMetricValidationResult,
     LoopbackValidationResult,
@@ -488,10 +494,19 @@ def validate_loopback(
             help="Output loopback validation results as JSON.",
         ),
     ] = False,
+    evidence_directory: Annotated[
+        Path | None,
+        typer.Option(
+            "--evidence-dir",
+            help="Directory in which to save loopback WAV and JSON evidence.",
+        ),
+    ] = None,
 ) -> None:
     """Execute end-to-end configured audio loopback validation."""
 
     backend = SoundDeviceBackend()
+
+    evidence: LoopbackEvidencePaths | None = None
 
     try:
         config = load_config(config_path)
@@ -501,11 +516,18 @@ def validate_loopback(
             config,
         )
 
+        if evidence_directory is not None:
+            evidence = save_loopback_evidence(
+                result,
+                evidence_directory,
+            )
+
     except (
         AudioAnalysisError,
         AudioBackendError,
         ConfigurationError,
         DeviceMatchError,
+        LoopbackReportingError,
         ValueError,
     ) as exc:
         error_console.print(
@@ -514,81 +536,10 @@ def validate_loopback(
         raise typer.Exit(code=2) from exc
 
     if json_output:
-        payload = {
-            "status": ("passed" if result.passed else "failed"),
-            "backend": {
-                "name": result.backend.name,
-                "library": result.backend.library,
-                "library_version": result.backend.library_version,
-            },
-            "device": result.device.model_dump(
-                mode="json",
-            ),
-            "stream": result.stream.model_dump(
-                mode="json",
-            ),
-            "routing": {
-                "output_channel_index": result.output_channel,
-                "input_channel_index": result.input_channel,
-            },
-            "audio": {
-                "playback": {
-                    "sample_rate": result.playback_audio.sample_rate,
-                    "channels": result.playback_audio.channel_count,
-                    "frames": result.playback_audio.frame_count,
-                },
-                "captured": {
-                    "sample_rate": result.captured_audio.sample_rate,
-                    "channels": result.captured_audio.channel_count,
-                    "frames": result.captured_audio.frame_count,
-                },
-                "analysed": {
-                    "sample_rate": result.analysed_audio.sample_rate,
-                    "channels": result.analysed_audio.channel_count,
-                    "frames": result.analysed_audio.frame_count,
-                },
-            },
-            "frequency": {
-                "expected_hz": result.frequency.expected_hz,
-                "measured_hz": result.frequency.measured_hz,
-                "error_hz": result.frequency.error_hz,
-                "tolerance_hz": result.frequency.tolerance_hz,
-                "passed": result.frequency.passed,
-            },
-            "metrics": {
-                "rms": {
-                    "overall": result.metrics.rms.overall,
-                    "per_channel": result.metrics.rms.per_channel,
-                },
-                "peak": {
-                    "overall": result.metrics.peak.overall,
-                    "per_channel": result.metrics.peak.per_channel,
-                },
-                "dc_offset": {
-                    "overall": result.metrics.dc_offset.overall,
-                    "per_channel": result.metrics.dc_offset.per_channel,
-                },
-                "silence": {
-                    "detected": result.metrics.silence.detected,
-                    "per_channel": result.metrics.silence.per_channel,
-                },
-                "clipping": {
-                    "detected": result.metrics.clipping.detected,
-                    "per_channel": result.metrics.clipping.per_channel,
-                },
-            },
-            "failures": [
-                {
-                    "metric": failure.metric,
-                    "channel": failure.channel,
-                    "actual": failure.actual,
-                    "expected": failure.expected,
-                    "threshold": failure.threshold,
-                    "reason": failure.reason,
-                }
-                for failure in result.failures
-            ],
-        }
+        payload = build_loopback_report(
+            result,
+            evidence=evidence,
+        )
 
         typer.echo(
             json.dumps(
@@ -612,6 +563,10 @@ def validate_loopback(
                     result,
                 )
             )
+
+        if evidence is not None:
+            console.print()
+            console.print(f"Evidence saved to: {evidence.output_directory}")
 
     if not result.passed:
         raise typer.Exit(code=1)

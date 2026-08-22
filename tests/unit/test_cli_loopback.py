@@ -385,3 +385,180 @@ stream:
 
     assert result.exit_code == 2
     assert "Loopback validation settings are required" in result.stderr
+
+
+def test_validate_loopback_saves_evidence(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "loopback.yaml"
+
+    evidence_directory = tmp_path / "evidence"
+
+    write_loopback_config(
+        config_path,
+    )
+
+    patch_loopback_backend(
+        monkeypatch,
+        captured_audio=create_loopback_capture(),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "validate-loopback",
+            "--config",
+            str(config_path),
+            "--evidence-dir",
+            str(evidence_directory),
+        ],
+    )
+
+    assert result.exit_code == 0
+
+    assert "Evidence saved to:" in result.stdout
+
+    assert (evidence_directory / "report.json").is_file()
+
+    assert (evidence_directory / "playback.wav").is_file()
+
+    assert (evidence_directory / "captured.wav").is_file()
+
+    assert (evidence_directory / "analysed.wav").is_file()
+
+
+def test_validate_loopback_saves_evidence_when_validation_fails(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "loopback.yaml"
+
+    evidence_directory = tmp_path / "failed-evidence"
+
+    write_loopback_config(
+        config_path,
+    )
+
+    silent_capture = AudioBuffer(
+        samples=np.zeros(
+            create_loopback_capture().samples.shape,
+            dtype=np.float32,
+        ),
+        sample_rate=SAMPLE_RATE,
+    )
+
+    patch_loopback_backend(
+        monkeypatch,
+        captured_audio=silent_capture,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "validate-loopback",
+            "--config",
+            str(config_path),
+            "--evidence-dir",
+            str(evidence_directory),
+        ],
+    )
+
+    assert result.exit_code == 1
+
+    assert (evidence_directory / "report.json").is_file()
+
+    assert (evidence_directory / "playback.wav").is_file()
+
+    assert (evidence_directory / "captured.wav").is_file()
+
+    assert (evidence_directory / "analysed.wav").is_file()
+
+    payload = json.loads(
+        (evidence_directory / "report.json").read_text(
+            encoding="utf-8",
+        )
+    )
+
+    assert payload["status"] == "failed"
+    assert payload["failures"]
+
+
+def test_validate_loopback_json_includes_evidence_paths(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "loopback.yaml"
+
+    evidence_directory = tmp_path / "evidence"
+
+    write_loopback_config(
+        config_path,
+    )
+
+    patch_loopback_backend(
+        monkeypatch,
+        captured_audio=create_loopback_capture(),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "validate-loopback",
+            "--config",
+            str(config_path),
+            "--json",
+            "--evidence-dir",
+            str(evidence_directory),
+        ],
+    )
+
+    assert result.exit_code == 0
+
+    payload = json.loads(
+        result.stdout,
+    )
+
+    assert payload["artifacts"]["playback_wav"] == str(evidence_directory / "playback.wav")
+
+    assert payload["artifacts"]["captured_wav"] == str(evidence_directory / "captured.wav")
+
+    assert payload["artifacts"]["analysed_wav"] == str(evidence_directory / "analysed.wav")
+
+
+def test_validate_loopback_reports_evidence_write_error(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "loopback.yaml"
+
+    invalid_directory = tmp_path / "not-a-directory"
+
+    invalid_directory.write_text(
+        "existing file",
+        encoding="utf-8",
+    )
+
+    write_loopback_config(
+        config_path,
+    )
+
+    patch_loopback_backend(
+        monkeypatch,
+        captured_audio=create_loopback_capture(),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "validate-loopback",
+            "--config",
+            str(config_path),
+            "--evidence-dir",
+            str(invalid_directory),
+        ],
+    )
+
+    assert result.exit_code == 2
+
+    assert "Could not save loopback evidence" in result.stderr
