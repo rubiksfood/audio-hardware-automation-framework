@@ -10,7 +10,7 @@ This project demonstrates QA automation, hardware testing, configuration-driven 
 
 ## Project Status
 
-**Phase 4 complete — signal generation and sample-domain analysis**
+**Phase 5 in progress — end-to-end physical loopback validation**
 
 Completed capabilities include:
 
@@ -29,12 +29,21 @@ Completed capabilities include:
 - Per-channel sample-domain metrics
 - Configuration-driven metric thresholds
 - Structured threshold failure reasons
+- Duplex playback and capture execution
+- Configurable physical loopback signal routing
+- Silence-padded loopback test signals
+- Captured-signal alignment
+- Dominant-frequency measurement
+- End-to-end loopback metric validation
+- Structured per-channel loopback failures
+- `validate-loopback` CLI command
+- Loopback WAV and JSON evidence export
 - WAV analysis through the `analyse-audio` CLI command
 - Backend-independent recording and playback services
 - Rich CLI and structured JSON reporting
 - Windows and Linux hardware validation
 
-**Current development:** later-phase loopback, latency, stream-health and stability validation.
+**Current development:** Phase 5 physical hardware validation and documentation, followed by latency, stream-health and stability validation.
 
 See the [Roadmap](#roadmap) for planned development.
 
@@ -52,7 +61,7 @@ The framework aims to provide a reusable foundation for automated testing of aud
 
 The current foundation includes reliable device discovery, configuration management, hardware identification, stream-capability validation, finite recording and playback, WAV handling, deterministic signal generation, sample-domain analysis, and configuration-driven metric validation.
 
-Future releases will build on the current signal and analysis foundation with loopback testing, measured sample-rate verification, deeper audio-quality measurements, latency observation, and stability testing.
+Future releases will build on the current loopback-validation foundation with measured sample-rate verification, deeper audio-quality measurements, latency observation, and stability testing.
 
 ---
 
@@ -196,6 +205,29 @@ audio-hw analyse-audio \
   --json
 ```
 
+Run physical loopback validation using the verified Linux JACK configuration:
+
+```bash
+audio-hw validate-loopback \
+  --config configs/example_loopback_jack.yaml
+```
+
+Output the loopback result as JSON:
+
+```bash
+audio-hw validate-loopback \
+  --config configs/example_loopback_jack.yaml \
+  --json
+```
+
+Save the playback, raw capture, aligned analysis audio and JSON report:
+
+```bash
+audio-hw validate-loopback \
+  --config configs/example_loopback_jack.yaml \
+  --evidence-dir evidence/linux-jack-48k
+```
+
 `validate-stream` checks whether PortAudio accepts the requested stream settings and whether the requested stream can be constructed and closed safely.
 
 `validate-recording` performs a finite recording using the configured duration and timeout. If `execution.output_file` is configured, the captured audio is exported as a WAV file.
@@ -204,7 +236,11 @@ audio-hw analyse-audio \
 
 `analyse-audio` reads the supplied WAV file into a framework-owned `AudioBuffer`, calculates RMS, peak and DC offset, performs silence and clipping detection, and applies configured thresholds per channel.
 
-Hardware validation commands require exactly one matching device. `analyse-audio` is file-based and does not perform device discovery or matching.
+`validate-loopback` generates a deterministic sine wave, routes it to the configured output channel, executes duplex playback and capture, aligns the selected captured input against the reference signal, measures dominant frequency, applies configured sample-domain thresholds, and returns structured pass/fail results.
+
+(When `--evidence-dir` is supplied, the command retains `playback.wav`, `captured.wav`, `analysed.wav` and `report.json` for both passing and failing validations.)
+
+Hardware validation commands require exactly one matching device. Physical loopback additionally requires that the selected PortAudio device expose both input and output channels as one usable duplex endpoint. `analyse-audio` is file-based and does not perform device discovery or matching.
 
 ---
 
@@ -317,6 +353,34 @@ Default detection thresholds assume normalized floating-point audio. When analys
 It is sample-domain analysis only and does not currently measure frequency response, distortion, signal-to-noise ratio, inter-sample peaks, latency or end-to-end signal-path correctness.
 
 See [`docs/signal-generation-analysis.md`](docs/signal-generation-analysis.md) for metric definitions, threshold behaviour, CLI usage and analysis limitations.
+
+---
+
+### End-to-End Loopback Validation
+
+Phase 5 builds on deterministic signal generation and sample-domain analysis with physical duplex loopback validation.
+
+Loopback validation supports:
+
+- Configurable output and input channel routing
+- Deterministic sine-wave playback
+- Leading and trailing silence padding
+- Backend-independent duplex execution
+- Captured-signal alignment
+- Dominant-frequency measurement
+- RMS, peak and DC-offset validation
+- Silence and clipping detection
+- Structured metric and channel failures
+- Human-readable and JSON CLI output
+- Optional WAV and JSON evidence retention
+
+A physical loopback test requires a line-level connection between the selected hardware output and input.
+
+The current implementation requires one PortAudio device that exposes both input and output channels as a duplex endpoint. Host APIs that expose the same physical interface as separate input-only and output-only devices cannot currently execute physical loopback through this workflow.
+
+For the current Linux Focusrite validation environment, JACK at 48 kHz is the known-good physical loopback path. Dedicated JACK and ALSA example configurations are retained separately because host APIs can expose different device, routing and duplex behaviour.
+
+See [`docs/loopback-validation.md`](docs/loopback-validation.md) for physical setup, safety guidance, host-API considerations, CLI usage, evidence export and validation scope.
 
 ---
 
@@ -794,6 +858,29 @@ Explains:
 - `analyse-audio` CLI and JSON output
 - Exit codes
 - Sample-domain analysis limitations
+
+---
+
+### Physical Loopback Validation
+
+```text
+docs/loopback-validation.md
+```
+
+Explains:
+
+- Physical loopback signal flow
+- Hardware and duplex-device requirements
+- Safe gain and monitoring setup
+- Loopback signal routing and padding
+- JACK and ALSA configuration separation
+- `validate-loopback` CLI usage
+- JSON output and exit codes
+- WAV and JSON evidence retention
+- Captured-signal alignment
+- Frequency-result interpretation
+- Platform and host-API limitations
+- Current validation scope
 
 ---
 
