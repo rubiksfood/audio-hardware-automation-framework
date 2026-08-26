@@ -89,3 +89,17 @@ class AudioBackend(ABC):
         raise BackendOperationNotSupportedError(
             f"{self.info.name} backend does not support playback",
         )
+
+    def duplex(
+        self,
+        device: AudioDevice,
+        config: StreamConfig,
+        audio: AudioBuffer,
+        *,
+        timeout_seconds: float,
+    ) -> AudioBuffer:
+        """Play audio while simultaneously capturing a finite input buffer."""
+
+        raise BackendOperationNotSupportedError(
+            f"{self.info.name} backend does not support duplex execution",
+        )

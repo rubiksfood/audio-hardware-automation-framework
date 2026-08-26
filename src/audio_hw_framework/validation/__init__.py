@@ -5,6 +5,14 @@ from audio_hw_framework.validation.audio_metrics import (
     MetricThresholdFailure,
     validate_audio_metrics,
 )
+from audio_hw_framework.validation.loopback_models import (
+    LoopbackFrequencyResult,
+    LoopbackValidationFailure,
+    LoopbackValidationResult,
+)
+from audio_hw_framework.validation.loopback_service import (
+    validate_configured_loopback,
+)
 from audio_hw_framework.validation.service import (
     StreamValidationResult,
     validate_configured_stream,
@@ -12,8 +20,12 @@ from audio_hw_framework.validation.service import (
 
 __all__ = [
     "AudioMetricValidationResult",
+    "LoopbackFrequencyResult",
+    "LoopbackValidationFailure",
+    "LoopbackValidationResult",
     "MetricThresholdFailure",
     "StreamValidationResult",
     "validate_audio_metrics",
     "validate_configured_stream",
+    "validate_configured_loopback",
 ]

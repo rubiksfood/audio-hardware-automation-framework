@@ -1,0 +1,34 @@
+device:
+  name_contains: "Scarlett"
+  host_api_contains: "ALSA"
+  minimum_input_channels: 2
+  minimum_output_channels: 2
+
+stream:
+  sample_rate: 48000
+  input_channels: 2
+  output_channels: 2
+  block_size: 128
+  dtype: float32
+
+execution:
+  timeout_seconds: 5.0
+
+loopback:
+  output_channel: 0
+  input_channel: 0
+  signal_duration_seconds: 1.0
+  frequency_hz: 1000.0
+  amplitude: 0.25
+  frequency_tolerance_hz: 5.0
+  padding_seconds: 0.1
+
+thresholds:
+  minimum_rms: 0.01
+  maximum_rms: 0.8
+  maximum_peak: 0.95
+  maximum_abs_dc_offset: 0.02
+  silence_threshold: 0.0001
+  clipping_threshold: 1.0
+  fail_on_silence: true
+  fail_on_clipping: true

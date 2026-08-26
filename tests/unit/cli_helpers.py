@@ -136,3 +136,45 @@ thresholds:
 """,
         encoding="utf-8",
     )
+
+
+def write_loopback_config(
+    path: Path,
+) -> None:
+    """Write an end-to-end loopback configuration for CLI tests."""
+
+    path.write_text(
+        """
+device:
+  name_contains: "Scarlett"
+  host_api_contains: "WASAPI"
+  minimum_input_channels: 2
+  minimum_output_channels: 2
+
+stream:
+  sample_rate: 48000
+  input_channels: 2
+  output_channels: 2
+  block_size: 128
+  dtype: "float32"
+
+execution:
+  timeout_seconds: 5.0
+
+thresholds:
+  minimum_rms: 0.1
+  maximum_peak: 0.5
+  fail_on_silence: true
+  fail_on_clipping: true
+
+loopback:
+  output_channel: 1
+  input_channel: 1
+  signal_duration_seconds: 0.01
+  frequency_hz: 1000.0
+  amplitude: 0.25
+  frequency_tolerance_hz: 5.0
+  padding_seconds: 0.001
+""",
+        encoding="utf-8",
+    )

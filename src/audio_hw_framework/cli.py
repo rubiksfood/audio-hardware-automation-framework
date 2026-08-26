@@ -29,10 +29,18 @@ from audio_hw_framework.recording import (
     RecordingResult,
     record_configured_audio,
 )
+from audio_hw_framework.reporting import (
+    LoopbackEvidencePaths,
+    LoopbackReportingError,
+    build_loopback_report,
+    save_loopback_evidence,
+)
 from audio_hw_framework.validation import (
     AudioMetricValidationResult,
+    LoopbackValidationResult,
     StreamValidationResult,
     validate_audio_metrics,
+    validate_configured_loopback,
     validate_configured_stream,
 )
 
@@ -214,6 +222,128 @@ def build_audio_analysis_failure_table(
     return table
 
 
+def build_loopback_validation_table(
+    result: LoopbackValidationResult,
+) -> Table:
+    """Build a human-readable loopback validation summary."""
+
+    title = "Loopback validation passed" if result.passed else "Loopback validation failed"
+
+    table = Table(title=title)
+
+    table.add_column("Setting")
+    table.add_column("Value")
+
+    table.add_row("Backend", result.backend.name)
+    table.add_row("Device", result.device.name)
+    table.add_row("Device index", str(result.device.index))
+    table.add_row("Host API", result.device.host_api_name)
+    table.add_row("Sample rate", f"{result.stream.sample_rate} Hz")
+
+    table.add_row(
+        "Output channel",
+        str(result.output_channel + 1),
+    )
+    table.add_row(
+        "Input channel",
+        str(result.input_channel + 1),
+    )
+
+    table.add_row(
+        "Expected frequency",
+        f"{result.frequency.expected_hz:.3f} Hz",
+    )
+    table.add_row(
+        "Measured frequency",
+        f"{result.frequency.measured_hz:.3f} Hz",
+    )
+    table.add_row(
+        "Frequency error",
+        f"{result.frequency.error_hz:.3f} Hz",
+    )
+    table.add_row(
+        "Frequency tolerance",
+        f"{result.frequency.tolerance_hz:.3f} Hz",
+    )
+
+    table.add_row(
+        "RMS",
+        f"{result.metrics.rms.overall:.6f}",
+    )
+    table.add_row(
+        "Peak",
+        f"{result.metrics.peak.overall:.6f}",
+    )
+    table.add_row(
+        "DC offset",
+        f"{result.metrics.dc_offset.overall:.6f}",
+    )
+    table.add_row(
+        "Silence detected",
+        str(result.metrics.silence.detected),
+    )
+    table.add_row(
+        "Clipping detected",
+        str(result.metrics.clipping.detected),
+    )
+
+    table.add_row(
+        "Playback frames",
+        str(result.playback_audio.frame_count),
+    )
+    table.add_row(
+        "Captured frames",
+        str(result.captured_audio.frame_count),
+    )
+    table.add_row(
+        "Analysed frames",
+        str(result.analysed_audio.frame_count),
+    )
+
+    return table
+
+
+def build_loopback_failure_table(
+    result: LoopbackValidationResult,
+) -> Table:
+    """Build a human-readable summary of loopback failures."""
+
+    table = Table(title="Loopback failures")
+
+    table.add_column("Metric")
+    table.add_column("Channel", justify="right")
+    table.add_column("Actual")
+    table.add_column("Expected")
+    table.add_column("Threshold")
+    table.add_column("Reason")
+
+    for failure in result.failures:
+        table.add_row(
+            failure.metric,
+            str(failure.channel + 1),
+            _format_loopback_value(failure.actual),
+            _format_loopback_value(failure.expected),
+            _format_loopback_value(failure.threshold),
+            failure.reason,
+        )
+
+    return table
+
+
+def _format_loopback_value(
+    value: float | bool | None,
+) -> str:
+    """Format an optional loopback failure value for CLI output."""
+
+    if value is None:
+        return "-"
+
+    if isinstance(value, bool):
+        return str(value)
+
+    return f"{value:.6f}"
+
+
 @app.callback()
 def main() -> None:
     """Inspect and validate audio hardware."""
@@ -345,6 +475,101 @@ def validate_stream(
         return
 
     console.print(build_stream_validation_table(result))
+
+
+@app.command("validate-loopback")
+def validate_loopback(
+    config_path: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            "-c",
+            help="YAML configuration file for loopback validation.",
+        ),
+    ],
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Output loopback validation results as JSON.",
+        ),
+    ] = False,
+    evidence_directory: Annotated[
+        Path | None,
+        typer.Option(
+            "--evidence-dir",
+            help="Directory in which to save loopback WAV and JSON evidence.",
+        ),
+    ] = None,
+) -> None:
+    """Execute end-to-end configured audio loopback validation."""
+
+    backend = SoundDeviceBackend()
+
+    evidence: LoopbackEvidencePaths | None = None
+
+    try:
+        config = load_config(config_path)
+
+        result = validate_configured_loopback(
+            backend,
+            config,
+        )
+
+        if evidence_directory is not None:
+            evidence = save_loopback_evidence(
+                result,
+                evidence_directory,
+            )
+
+    except (
+        AudioAnalysisError,
+        AudioBackendError,
+        ConfigurationError,
+        DeviceMatchError,
+        LoopbackReportingError,
+        ValueError,
+    ) as exc:
+        error_console.print(
+            f"[bold red]Error:[/bold red] {exc}",
+        )
+        raise typer.Exit(code=2) from exc
+
+    if json_output:
+        payload = build_loopback_report(
+            result,
+            evidence=evidence,
+        )
+
+        typer.echo(
+            json.dumps(
+                payload,
+                indent=2,
+            )
+        )
+
+    else:
+        console.print(
+            build_loopback_validation_table(
+                result,
+            )
+        )
+
+        if result.failures:
+            console.print()
+
+            console.print(
+                build_loopback_failure_table(
+                    result,
+                )
+            )
+
+        if evidence is not None:
+            console.print()
+            console.print(f"Evidence saved to: {evidence.output_directory}")
+
+    if not result.passed:
+        raise typer.Exit(code=1)
 
 
 @app.command("validate-recording")

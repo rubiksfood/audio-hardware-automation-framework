@@ -339,3 +339,166 @@ class SoundDeviceBackend(AudioBackend):
         finally:
             if stream is not None:
                 stream.close(ignore_errors=True)
+
+    def duplex(
+        self,
+        device: AudioDevice,
+        config: StreamConfig,
+        audio: AudioBuffer,
+        *,
+        timeout_seconds: float,
+    ) -> AudioBuffer:
+        """Play audio while simultaneously capturing from a PortAudio stream."""
+
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be greater than 0")
+
+        if config.input_channels == 0:
+            raise AudioBackendError(
+                "Cannot perform duplex execution with no input channels",
+            )
+
+        if config.output_channels == 0:
+            raise AudioBackendError(
+                "Cannot perform duplex execution with no output channels",
+            )
+
+        if audio.sample_rate != config.sample_rate:
+            raise AudioBackendError(
+                "Duplex playback audio sample rate does not match the stream sample rate",
+            )
+
+        if audio.channel_count != config.output_channels:
+            raise AudioBackendError(
+                "Duplex playback audio channel count does not match the stream output channels",
+            )
+
+        if audio.frame_count == 0:
+            return AudioBuffer(
+                samples=np.empty(
+                    (0, config.input_channels),
+                    dtype=config.dtype.value,
+                ),
+                sample_rate=config.sample_rate,
+            )
+
+        block_size = config.block_size if config.block_size is not None else 0
+
+        playback_samples = np.ascontiguousarray(
+            audio.samples,
+            dtype=config.dtype.value,
+        )
+
+        stream = None
+
+        try:
+            stream = sd.Stream(
+                samplerate=config.sample_rate,
+                blocksize=block_size,
+                device=(device.index, device.index),
+                channels=(
+                    config.input_channels,
+                    config.output_channels,
+                ),
+                dtype=(
+                    config.dtype.value,
+                    config.dtype.value,
+                ),
+            )
+
+            stream.start()
+
+            captured_chunks: list[np.ndarray] = []
+
+            written_frames = 0
+            captured_frames = 0
+
+            deadline = time.monotonic() + timeout_seconds
+
+            while written_frames < audio.frame_count or captured_frames < audio.frame_count:
+                if time.monotonic() >= deadline:
+                    raise AudioBackendError(
+                        f"Duplex execution timed out for device index {device.index}",
+                    )
+
+                made_progress = False
+
+                if written_frames < audio.frame_count:
+                    available_output_frames = stream.write_available
+
+                    if available_output_frames > 0:
+                        frames_to_write = min(
+                            available_output_frames,
+                            audio.frame_count - written_frames,
+                        )
+
+                        end_frame = written_frames + frames_to_write
+
+                        underflowed = stream.write(
+                            playback_samples[written_frames:end_frame],
+                        )
+
+                        if underflowed:
+                            raise AudioBackendError(
+                                "Output underflow during duplex execution "
+                                f"for device index {device.index}",
+                            )
+
+                        written_frames = end_frame
+                        made_progress = True
+
+                if captured_frames < audio.frame_count:
+                    available_input_frames = stream.read_available
+
+                    if available_input_frames > 0:
+                        frames_to_read = min(
+                            available_input_frames,
+                            audio.frame_count - captured_frames,
+                        )
+
+                        data, overflowed = stream.read(
+                            frames_to_read,
+                        )
+
+                        if overflowed:
+                            raise AudioBackendError(
+                                "Input overflow during duplex execution "
+                                f"for device index {device.index}",
+                            )
+
+                        captured_chunks.append(data)
+                        captured_frames += len(data)
+                        made_progress = True
+
+                if not made_progress:
+                    time.sleep(0.001)
+
+            stream.stop()
+
+        except sd.PortAudioError as exc:
+            if stream is not None:
+                stream.abort(ignore_errors=True)
+
+            raise AudioBackendError(
+                f"Could not perform duplex execution for device index {device.index}: {exc}",
+            ) from exc
+
+        except AudioBackendError:
+            if stream is not None:
+                stream.abort(ignore_errors=True)
+
+            raise
+
+        finally:
+            if stream is not None:
+                stream.close(ignore_errors=True)
+
+        captured_samples = np.concatenate(
+            captured_chunks,
+            axis=0,
+        )
+
+        return AudioBuffer(
+            samples=captured_samples,
+            sample_rate=config.sample_rate,
+        )

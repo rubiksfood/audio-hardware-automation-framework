@@ -9,6 +9,10 @@ from audio_hw_framework.signal.models import (
     SilenceConfig,
     SineWaveConfig,
 )
+from audio_hw_framework.signal.transforms import (
+    pad_signal,
+    route_mono_signal,
+)
 
 __all__ = [
     "SignalConfig",
@@ -16,4 +20,6 @@ __all__ = [
     "SineWaveConfig",
     "generate_silence",
     "generate_sine_wave",
+    "pad_signal",
+    "route_mono_signal",
 ]

@@ -6,6 +6,7 @@ from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from audio_hw_framework.configuration.loopback import LoopbackValidationConfig
 from audio_hw_framework.configuration.thresholds import AudioMetricThresholds
 
 
@@ -109,3 +110,35 @@ class FrameworkConfig(BaseModel):
     thresholds: AudioMetricThresholds = Field(
         default_factory=AudioMetricThresholds,
     )
+    loopback: LoopbackValidationConfig | None = None
+
+    @model_validator(mode="after")
+    def validate_loopback_settings(self) -> Self:
+        """Validate loopback settings against the configured stream."""
+
+        if self.loopback is None:
+            return self
+
+        if self.stream.input_channels == 0 or self.stream.output_channels == 0:
+            raise ValueError(
+                "Loopback validation requires a duplex stream",
+            )
+
+        if self.loopback.input_channel >= self.stream.input_channels:
+            raise ValueError(
+                "loopback.input_channel must be less than stream.input_channels",
+            )
+
+        if self.loopback.output_channel >= self.stream.output_channels:
+            raise ValueError(
+                "loopback.output_channel must be less than stream.output_channels",
+            )
+
+        nyquist_frequency = self.stream.sample_rate / 2
+
+        if self.loopback.frequency_hz >= nyquist_frequency:
+            raise ValueError(
+                "loopback.frequency_hz must be less than half the stream sample rate",
+            )
+
+        return self
