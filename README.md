@@ -10,7 +10,7 @@ This project demonstrates QA automation, hardware testing, configuration-driven 
 
 ## Project Status
 
-**Phase 5 in progress — end-to-end physical loopback validation**
+**Phase 5 complete — end-to-end physical loopback validation**
 
 Completed capabilities include:
 
@@ -43,7 +43,7 @@ Completed capabilities include:
 - Rich CLI and structured JSON reporting
 - Windows and Linux hardware validation
 
-**Current development:** Phase 5 physical hardware validation and documentation, followed by latency, stream-health and stability validation.
+**Next development:** analyse the frequency-domain characteristics of recorded signals and compare them against expected behaviour.
 
 See the [Roadmap](#roadmap) for planned development.
 
@@ -59,7 +59,7 @@ The framework aims to provide a reusable foundation for automated testing of aud
 - Audio drivers
 - Recording and playback systems
 
-The current foundation includes reliable device discovery, configuration management, hardware identification, stream-capability validation, finite recording and playback, WAV handling, deterministic signal generation, sample-domain analysis, and configuration-driven metric validation.
+The current foundation includes reliable device discovery, configuration management, hardware identification, stream-capability validation, finite recording and playback, WAV handling, deterministic signal generation, sample-domain analysis, configuration-driven metric validation, duplex loopback execution, captured-signal alignment, frequency validation, and evidence export.
 
 Future releases will build on the current loopback-validation foundation with measured sample-rate verification, deeper audio-quality measurements, latency observation, and stability testing.
 
@@ -205,18 +205,18 @@ audio-hw analyse-audio \
   --json
 ```
 
-Run physical loopback validation using the verified Linux JACK configuration:
+Run physical loopback validation using the verified Linux ALSA configuration:
 
 ```bash
 audio-hw validate-loopback \
-  --config configs/example_loopback_jack.yaml
+  --config configs/example_loopback_alsa.yaml
 ```
 
 Output the loopback result as JSON:
 
 ```bash
 audio-hw validate-loopback \
-  --config configs/example_loopback_jack.yaml \
+  --config configs/example_loopback_alsa.yaml \
   --json
 ```
 
@@ -224,8 +224,8 @@ Save the playback, raw capture, aligned analysis audio and JSON report:
 
 ```bash
 audio-hw validate-loopback \
-  --config configs/example_loopback_jack.yaml \
-  --evidence-dir evidence/linux-jack-48k
+  --config configs/example_loopback_alsa.yaml \
+  --evidence-dir evidence/linux-alsa
 ```
 
 `validate-stream` checks whether PortAudio accepts the requested stream settings and whether the requested stream can be constructed and closed safely.
@@ -378,7 +378,11 @@ A physical loopback test requires a line-level connection between the selected h
 
 The current implementation requires one PortAudio device that exposes both input and output channels as a duplex endpoint. Host APIs that expose the same physical interface as separate input-only and output-only devices cannot currently execute physical loopback through this workflow.
 
-For the current Linux Focusrite validation environment, JACK at 48 kHz is the known-good physical loopback path. Dedicated JACK and ALSA example configurations are retained separately because host APIs can expose different device, routing and duplex behaviour.
+For the current Linux Focusrite validation environment, direct ALSA is the verified physical loopback path.
+
+JACK can pass through an explicit software-loopback connection, but that result does not represent the Scarlett analogue hardware path. With the PortAudio JACK client routed toward the Scarlett playback and capture-side ports, the tested physical loopback returned only a near-noise-floor capture, did not recover the expected 1 kHz reference, and failed both frequency and minimum-RMS validation.
+
+The precise JACK physical capture routing/port mapping remains a separate follow-up investigation. Dedicated ALSA and JACK configurations are retained because host APIs can expose materially different routing and duplex behaviour.
 
 See [`docs/loopback-validation.md`](docs/loopback-validation.md) for physical setup, safety guidance, host-API considerations, CLI usage, evidence export and validation scope.
 
@@ -436,6 +440,15 @@ The project includes:
 - Non-finite sample and threshold validation tests
 - Analysis failure-path tests
 - CLI analysis tests
+- Duplex backend contract tests
+- Deterministic fake duplex tests
+- PortAudio duplex execution tests
+- Signal routing and padding tests
+- Captured-signal alignment tests
+- Dominant-frequency analysis tests
+- Loopback validation-service tests
+- Loopback CLI tests
+- Loopback evidence-reporting tests
 
 GitHub Actions runs hardware-independent tests, linting, formatting checks, type checking, and coverage reporting on Ubuntu.
 
@@ -469,9 +482,11 @@ This enables more reliable device matching on systems where the same physical in
 audio-hardware-automation-framework/
 │
 ├── configs/
-├── configs/
 │   ├── example_analysis.yaml
 │   ├── example_duplex_device.yaml
+│   ├── example_loopback.yaml
+│   ├── example_loopback_alsa.yaml
+│   ├── example_loopback_jack.yaml
 │   │
 │   ├── scarlett_windows_mme_input.yaml
 │   ├── scarlett_windows_mme_output.yaml
@@ -495,6 +510,8 @@ audio-hardware-automation-framework/
 │
 ├── docs/
 │   ├── discovery.md
+│   ├── focusrite-loopback-validation.md
+│   ├── loopback-validation.md
 │   ├── platform-support.md
 │   ├── recording-playback-validation.md
 │   ├── signal-generation-analysis.md
@@ -514,16 +531,24 @@ audio-hardware-automation-framework/
 │       ├── phase-4-analysis-json.png
 │       ├── phase-4-analysis-sine-wave.png
 │       ├── phase-4-pytest-coverage.png
-│       └── phase-4-threshold-failure.png
+│       ├── phase-4-threshold-failure.png
+│       ├── phase-5-alsa-physical-loopback.png
+│       ├── phase-5-evidence-bundle.png
+│       ├── phase-5-jack-loopback-fail.png
+│       ├── phase-5-jack-routing.png
+│       ├── phase-5-loopback-json.png
+│       └── phase-5-pytest-coverage.png
 │
 ├── src/
 │   └── audio_hw_framework/
 │       ├── analysis/
 │       │   ├── __init__.py
 │       │   ├── _samples.py
+│       │   ├── alignment.py
 │       │   ├── dc_offset.py
 │       │   ├── detection.py
 │       │   ├── exceptions.py
+│       │   ├── frequency.py
 │       │   ├── models.py
 │       │   ├── peak.py
 │       │   └── rms.py
@@ -557,14 +582,21 @@ audio-hardware-automation-framework/
 │       │   ├── __init__.py
 │       │   └── service.py
 │       │
+│       ├── reporting/
+│       │   ├── __init__.py
+│       │   └── loopback.py
+│       │
 │       ├── signal/
 │       │   ├── __init__.py
 │       │   ├── generator.py
-│       │   └── models.py
+│       │   ├── models.py
+│       │   └── transforms.py
 │       │
 │       ├── validation/
 │       │   ├── __init__.py
 │       │   ├── audio_metrics.py
+│       │   ├── loopback_models.py
+│       │   ├── loopback_service.py
 │       │   └── service.py
 │       │
 │       ├── __init__.py
@@ -576,14 +608,17 @@ audio-hardware-automation-framework/
 │   └── unit/
 │       ├── __init__.py
 │       ├── cli_helpers.py
+│       ├── fake_backend_helpers.py
+│       ├── sounddevice_backend_helpers.py
 │       ├── test_analysis_models.py
 │       ├── test_analysis_non_finite.py
 │       ├── test_audio_buffer.py
 │       ├── test_audio_metric_validation.py
-│       ├── test_backend.py
+│       ├── test_backend_contract.py
 │       ├── test_cli_analysis.py
 │       ├── test_cli_app.py
 │       ├── test_cli_inspect_devices.py
+│       ├── test_cli_loopback.py
 │       ├── test_cli_playback.py
 │       ├── test_cli_recording.py
 │       ├── test_cli_stream_validation.py
@@ -591,15 +626,29 @@ audio-hardware-automation-framework/
 │       ├── test_dc_offset.py
 │       ├── test_detection.py
 │       ├── test_device_matching.py
+│       ├── test_fake_backend_duplex.py
+│       ├── test_fake_backend_playback.py
+│       ├── test_fake_backend_recording.py
+│       ├── test_fake_backend_stream.py
+│       ├── test_frequency.py
+│       ├── test_loopback_models.py
+│       ├── test_loopback_reporting.py
+│       ├── test_loopback_service.py
 │       ├── test_models.py
 │       ├── test_package.py
 │       ├── test_peak.py
 │       ├── test_playback_service.py
 │       ├── test_recording_service.py
 │       ├── test_rms.py
+│       ├── test_signal_alignment.py
 │       ├── test_signal_generator.py
 │       ├── test_signal_models.py
-│       ├── test_sounddevice_backend.py
+│       ├── test_signal_transforms.py
+│       ├── test_sounddevice_backend_device.py
+│       ├── test_sounddevice_backend_duplex.py
+│       ├── test_sounddevice_backend_playback.py
+│       ├── test_sounddevice_backend_recording.py
+│       ├── test_sounddevice_backend_stream.py
 │       ├── test_validation_service.py
 │       └── test_wav.py
 │
@@ -772,6 +821,30 @@ Current validation:
 - WAV export of recorded audio
 - Finite playback through the Scarlett output
 - Structured CLI and JSON validation reporting
+- Physical end-to-end loopback validation
+- Verified physical duplex loopback through ALSA at 48 kHz
+- JACK software-loopback validation and physical-routing diagnostics
+- Configurable loopback input/output routing
+- Captured-signal alignment against a generated reference
+- Dominant-frequency validation using a 1 kHz test tone
+- RMS, peak, DC-offset, silence and clipping validation
+- WAV and JSON loopback evidence retention
+- JACK and ALSA host-API comparison
+
+Phase 5 loopback findings:
+
+| Environment | Result | Observation |
+| --- | --- | --- |
+| Linux / ALSA / 48 kHz / physical cable | PASS | Physical 1 kHz signal successfully recaptured and validated |
+| Linux / JACK / 48 kHz / software loopback | PASS | Digital/software route only; not physical hardware evidence |
+| Linux / JACK / 48 kHz / physical routing attempt | FAIL | Expected 1 kHz return absent; capture remained near noise floor |
+| Windows | Not executed | No suitable single Scarlett duplex PortAudio endpoint was available |
+
+The direct ALSA 48 kHz run is the Phase 5 physical hardware acceptance result.
+
+The JACK physical-routing behaviour remains a separate follow-up investigation.
+
+See [`docs/focusrite-loopback-validation.md`](docs/focusrite-loopback-validation.md) for the detailed Phase 5 hardware results and interpretation.
 
 Platforms tested:
 
@@ -884,6 +957,27 @@ Explains:
 
 ---
 
+### Focusrite Loopback Hardware Validation
+
+```text
+docs/focusrite-loopback-validation.md
+```
+
+Records:
+
+- Focusrite Scarlett 2i2 physical loopback validation
+- ALSA 48 kHz passing physical hardware result
+- JACK 48 kHz software-loopback result
+- JACK 48 kHz physical-routing failure investigation
+- Correction of invalid preliminary no-cable ALSA results
+- Windows duplex-endpoint limitation
+- Measured frequency and sample-domain results
+- Host-API and routing comparison
+- Evidence interpretation
+- Phase 5 acceptance criteria and limitations
+
+---
+
 ## Evidence
 
 ### Phase 1
@@ -954,6 +1048,91 @@ Explains:
 
 ![pytest coverage](docs/images/phase-4-pytest-coverage.png)
 
+### Phase 5
+
+#### ALSA physical loopback validation
+
+The Focusrite Scarlett 2i2 successfully completed end-to-end physical loopback validation through direct ALSA at 48 kHz.
+
+![ALSA physical loopback validation](docs/images/phase-5-alsa-physical-loopback.png)
+
+A representative physical capture measured approximately:
+
+```text
+Frequency:      1000.000 Hz
+RMS:            0.014242
+Peak:           0.021235
+DC offset:      0.000005
+Silence:        False
+Clipping:       False
+```
+
+The physical signal path was:
+
+```text
+framework
+    ↓
+Scarlett output
+    ↓
+physical line-level cable
+    ↓
+Scarlett input
+    ↓
+framework capture
+```
+
+This is the primary Phase 5 hardware acceptance result.
+
+#### Structured JSON evidence
+
+The validation result is also available as structured machine-readable JSON containing backend, device, stream, routing, frequency, metric and artifact information.
+
+![Loopback JSON evidence](docs/images/phase-5-loopback-json.png)
+
+#### Evidence bundle
+
+A completed validation retains playback, raw capture, aligned analysis audio and the structured report.
+
+![Loopback evidence bundle](docs/images/phase-5-evidence-bundle.png)
+
+#### JACK routing investigation
+
+JACK was also tested at 48 kHz.
+
+An explicit software-loopback route can produce a passing validation, but that result does not prove physical Scarlett loopback.
+
+During a physical-routing diagnostic run, the active PortAudio JACK client was connected into the Scarlett graph:
+
+![JACK routing graph](docs/images/phase-5-jack-routing.png)
+
+The test nevertheless failed because the returned capture remained near the noise floor and did not contain the expected 1 kHz reference:
+
+![JACK physical loopback failure](docs/images/phase-5-jack-loopback-fail.png)
+
+```
+Expected frequency:  1000.000 Hz
+Measured frequency:  49.970 Hz
+RMS:                 0.000024
+Peak:                0.000115
+```
+
+The retained `playback.wav` contained the expected test tone, while `captured.wav` and `analysed.wav` contained only the near-noise-floor returned signal.
+
+Because the same physical cable and Scarlett input/output path pass through direct ALSA, the remaining behaviour is documented as an unresolved JACK physical capture routing or port-mapping issue rather than a framework or hardware-loopback failure.
+
+#### Automated regression suite
+
+![Phase 5 pytest coverage](docs/images/phase-5-pytest-coverage.png)
+
+The Phase 5 hardware-independent regression suite completed with:
+
+```text
+400 passed
+99% coverage
+```
+
+See [`docs/focusrite-loopback-validation.md`](docs/focusrite-loopback-validation.md) for the complete result matrix and interpretation.
+
 ---
 
 ## Roadmap
@@ -1020,12 +1199,34 @@ Explains:
 - Human-readable and JSON analysis reporting
 - Documented sample-domain analysis limitations
 
+### Phase 5 — End-to-end physical loopback validation
+
+**Complete**
+
+- Typed loopback validation configuration
+- Typed loopback result and failure models
+- Backend duplex execution contract
+- Deterministic fake-backend duplex execution
+- PortAudio duplex playback and capture
+- Output-channel routing
+- Signal padding for hardware latency
+- Captured-signal alignment
+- Dominant-frequency measurement
+- End-to-end loopback validation service
+- `validate-loopback` CLI command
+- Human-readable and structured JSON reporting
+- Playback, capture and analysed WAV evidence retention
+- Structured JSON evidence export
+- Physical loopback setup and safety documentation
+- Focusrite Scarlett 2i2 hardware validation
+- JACK and ALSA host-API comparison
+
 ### Later phases
 
-- Loopback validation
-- Latency and stream-health measurement
+- More advanced signal analysis
+- Measured round-trip latency and stream-health validation
 - Stability and recovery testing
-- Validation profiles and report generation
+- Validation profiles and richer report generation
 
 ---
 
@@ -1085,6 +1286,15 @@ This project demonstrates:
 - Structured QA failure reporting
 - Sample-domain analysis and limitation documentation
 - Human-readable and machine-readable reporting
+- Duplex audio execution and validation
+- Physical audio loopback automation
+- Configurable channel-routing validation
+- Captured-signal alignment using normalized correlation
+- FFT-based dominant-frequency analysis
+- End-to-end hardware/software signal-path validation
+- Host-API behaviour comparison
+- Evidence-preserving validation workflows
+- Structured hardware-validation result reporting
 
 ---
 

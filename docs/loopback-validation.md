@@ -177,25 +177,44 @@ Then select the required host API through configuration.
 For the current Linux Focusrite validation setup, dedicated example configurations are provided:
 
 ```text
-configs/example_loopback_jack.yaml
 configs/example_loopback_alsa.yaml
+configs/example_loopback_jack.yaml
 ```
 
-The JACK configuration is the known-good physical loopback path used for Phase 5 validation at 48 kHz.
+The direct ALSA configuration at 48 kHz is the known-good physical loopback path used for Phase 5 hardware acceptance.
 
-The ALSA configuration is retained for host-API comparison and diagnostic testing. It should not be treated as equivalent to the verified JACK path.
+The JACK configuration is retained for host-API comparison and routing diagnostics.
 
-Detailed observed hardware results are documented separately from the setup procedure so that environment-specific findings are not confused with framework requirements.
+JACK requires additional care because it exposes an explicit software routing graph. A validation can pass through a software connection without the signal travelling through the physical audio-interface output and input.
+
+A JACK PASS must therefore not automatically be interpreted as physical hardware-loopback evidence.
+
+For the tested Scarlett configuration:
+
+```text
+ALSA / 48 kHz / physical cable
+    → PASS
+
+JACK / 48 kHz / software-routed loopback
+    → PASS, but software path only
+
+JACK / 48 kHz / attempted Scarlett physical routing
+    → FAIL, expected 1 kHz return absent and capture near the noise floor
+```
+
+The precise JACK physical capture-routing issue remains a separate diagnostic item.
+
+Detailed observed hardware results are documented in [`focusrite-loopback-validation.md`](focusrite-loopback-validation.md) so that environment-specific findings remain separate from the general setup procedure and framework requirements.
 
 ---
 
 ## Running Physical Loopback Validation
 
-For the verified JACK configuration:
+For the verified ALSA configuration:
 
 ```bash
 audio-hw validate-loopback \
-  --config configs/example_loopback_jack.yaml
+  --config configs/example_loopback_alsa.yaml
 ```
 
 Human-readable output reports:
@@ -229,7 +248,7 @@ Use:
 
 ```bash
 audio-hw validate-loopback \
-  --config configs/example_loopback_jack.yaml \
+  --config configs/example_loopback_alsa.yaml \
   --json
 ```
 
@@ -257,14 +276,14 @@ Use `--evidence-dir` to retain validation evidence:
 
 ```bash
 audio-hw validate-loopback \
-  --config configs/example_loopback_jack.yaml \
-  --evidence-dir evidence/linux-jack-48k
+  --config configs/example_loopback_alsa.yaml \
+  --evidence-dir evidence/linux-alsa
 ```
 
 The directory contains:
 
 ```text
-evidence/linux-jack-48k/
+evidence/linux-alsa/
 ├── playback.wav
 ├── captured.wav
 ├── analysed.wav
@@ -434,6 +453,14 @@ Different host APIs can expose different:
 - routing behaviour.
 
 The framework therefore uses host-API-aware device matching and separate configurations where required.
+
+The tested Focusrite Scarlett 2i2 successfully completed physical loopback validation through direct ALSA at 48 kHz.
+
+JACK additionally exposes an explicit routing graph. Software routing can return an application's playback signal directly into its capture path, producing a valid software-loopback PASS without proving that the signal travelled through the audio interface's analogue output and input.
+
+When JACK is used for physical hardware validation, inspect the active routing graph and verify that the intended application playback, hardware playback, hardware capture and application capture ports are connected as expected.
+
+On the tested system, the current JACK Scarlett routing did not return the expected physical loopback signal even though the same cable and interface passed through direct ALSA. The latest diagnostic run returned very low-level capture with a dominant frequency unrelated to the 1 kHz reference and failed both frequency and minimum-RMS validation. The precise JACK capture-port mapping remains under separate investigation.
 
 ### Windows
 
