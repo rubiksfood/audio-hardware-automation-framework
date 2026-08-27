@@ -112,6 +112,12 @@ The framework's default loopback signal amplitude is deliberately below full sca
 
 Hardware gain and monitoring settings must still be configured safely.
 
+On interfaces where a front-panel monitor/output control also controls the tested line outputs, that hardware control is part of the physical signal path.
+
+During Scarlett testing, setting the analogue output control to minimum removed the usable physical return, while excessive output/input level could drive the captured signal to clipping.
+
+Use a moderate repeatable hardware level for validation rather than treating software amplitude as the only gain control.
+
 ---
 
 ## Test Signal
@@ -194,17 +200,57 @@ For the tested Scarlett configuration:
 ```text
 ALSA / 48 kHz / physical cable
     → PASS
+    → unattended physical path
 
-JACK / 48 kHz / software-routed loopback
-    → PASS, but software path only
+JACK / 48 kHz / software or monitor route
+    → PASS
+    → software path only
 
-JACK / 48 kHz / attempted Scarlett physical routing
-    → FAIL, expected 1 kHz return absent and capture near the noise floor
+JACK / 48 kHz / default physical routing
+    → FAIL
+
+JACK / 48 kHz / manually completed physical routing
+    → PASS
+    → physical path verified
+    → requires per-run JACK graph modification
 ```
 
-The precise JACK physical capture-routing issue remains a separate diagnostic item.
+Post-Phase 5 diagnostic testing established a working physical JACK path, but the required physical-input connection must currently be added manually after the transient PortAudio JACK client appears.
+
+JACK physical loopback is therefore possible on the tested system but is not currently an unattended framework-only workflow.
+
+Detailed routing results are documented in [`jack-loopback-routing.md`](jack-loopback-routing.md).
 
 Detailed observed hardware results are documented in [`focusrite-loopback-validation.md`](focusrite-loopback-validation.md) so that environment-specific findings remain separate from the general setup procedure and framework requirements.
+
+---
+
+## JACK Routing Considerations
+
+JACK exposes an explicit routing graph, so selecting a PortAudio device does not by itself prove that the application's capture ports are connected to the intended physical hardware inputs.
+
+On the tested Scarlett system, the PortAudio JACK client exposed temporary ports such as:
+
+```text
+PortAudio:in_0
+PortAudio:in_1
+PortAudio:out_0
+PortAudio:out_1
+```
+
+These ports existed only while the framework's duplex stream was active.
+
+The default JACK graph did not produce a valid physical loopback return.
+
+A valid physical result was obtained only when the original capture routing was retained and the Scarlett physical Input 1 `capture_MONO` source was additionally connected to `PortAudio:in_0`.
+
+The additional connection disappears when the framework closes the PortAudio stream because the PortAudio JACK client itself disappears.
+
+The framework does not currently create or maintain JACK graph connections.
+
+A JACK-based physical validation should therefore distinguish between `stream/device selection` and `JACK graph routing` as separate test preconditions.
+
+Software `monitor_*` routes must also be treated carefully because they can return the generated playback signal digitally without traversing the external analogue loopback path.
 
 ---
 
@@ -460,7 +506,15 @@ JACK additionally exposes an explicit routing graph. Software routing can return
 
 When JACK is used for physical hardware validation, inspect the active routing graph and verify that the intended application playback, hardware playback, hardware capture and application capture ports are connected as expected.
 
-On the tested system, the current JACK Scarlett routing did not return the expected physical loopback signal even though the same cable and interface passed through direct ALSA. The latest diagnostic run returned very low-level capture with a dominant frequency unrelated to the 1 kHz reference and failed both frequency and minimum-RMS validation. The precise JACK capture-port mapping remains under separate investigation.
+On the tested system, default JACK routing did not return the expected physical Scarlett loopback signal at a valid level.
+
+Post-Phase 5 diagnostics demonstrated that physical JACK loopback succeeds when the existing PortAudio capture routing is retained and the physical Input 1 `capture_MONO` source is additionally connected to `PortAudio:in_0`.
+
+Cable A/B/A testing confirmed that the passing result depended on the external physical connection.
+
+Because the PortAudio JACK client is recreated for each validation stream, the additional connection must currently be established manually for every run.
+
+Direct ALSA therefore remains the preferred unattended physical loopback path for the tested environment.
 
 ### Windows
 
