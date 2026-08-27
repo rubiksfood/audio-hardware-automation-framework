@@ -39,7 +39,11 @@ The validation also compared the behaviour of different PortAudio host APIs.
 
 The key verified Phase 5 result is that physical end-to-end loopback succeeds through the direct ALSA Scarlett endpoint at 48 kHz.
 
-JACK was also investigated. A JACK software-routed loopback can pass validation, but the tested JACK routing to and from the Scarlett hardware did not return the physical loopback signal at a valid captured level. That behaviour remains a follow-up diagnostic item rather than a Phase 5 acceptance requirement.
+JACK was also investigated further after Phase 5. Software-routed JACK loopback can pass without traversing the physical hardware path, while default JACK physical routing did not return the expected signal at a valid captured level.
+
+Post-Phase 5 diagnostic testing subsequently demonstrated successful physical loopback through JACK at 48 kHz when the existing PortAudio capture routing was retained and the physical Input 1 `capture_MONO` source was additionally connected manually to `PortAudio:in_0`.
+
+Because that connection must currently be recreated for each transient PortAudio JACK client, direct ALSA remains the primary unattended physical acceptance path.
 
 ---
 
@@ -175,7 +179,9 @@ configs/example_loopback_jack.yaml
 
 The ALSA configuration is the verified Phase 5 physical loopback path.
 
-The JACK configuration is retained for host-API comparison and further routing diagnostics.
+Post-Phase 5 diagnostic testing also demonstrated successful physical loopback through JACK at 48 kHz when the required JACK graph connection was added manually after the transient PortAudio client appeared.
+
+The JACK configuration is therefore retained for host-API comparison and routing diagnostics, but JACK physical loopback is not currently an unattended framework-only workflow.
 
 ---
 
@@ -214,20 +220,27 @@ Correcting these interpretations is part of the final Phase 5 evidence review.
 | --- | ---: | --- | --- | --- |
 | ALSA physical loopback | 48 kHz | Executed | PASS | Verified Scarlett DAC → cable → ADC path |
 | JACK software-routed loopback | 48 kHz | Executed | PASS | Digital/software signal path only |
-| JACK Scarlett hardware routing | 48 kHz | Executed | FAIL | Expected 1 kHz return absent; capture remained near noise floor |
+| JACK default physical routing | 48 kHz | Executed | FAIL | Expected physical return not captured at a valid level |
+| JACK `capture_MONO` replacing default route | 48 kHz | Executed | FAIL | Physical source alone was insufficient in the tested graph |
+| JACK default routing + manual `capture_MONO` connection | 48 kHz | Executed | PASS | Verified physical loopback; requires manual runtime graph modification |
 | JACK | 44.1 kHz | Rejected before duplex execution | Not run | PortAudio reported `Invalid sample rate` |
 | ALSA | 44.1 kHz | Not retested after physical setup correction | Not run | Earlier unplugged-cable result is not valid physical-loopback evidence |
 | Windows PortAudio endpoints | — | No suitable single duplex endpoint | Not run | Scarlett input and output were exposed separately |
 
-The matrix distinguishes three different questions:
+The matrix distinguishes several different questions:
 
 ```text
 Can the framework execute duplex audio?
 Can a software-routed signal return through the selected host API?
 Can the signal travel through the real hardware output and input path?
+Can the required host routing be established automatically?
 ```
 
 A successful answer to one does not automatically prove the others.
+
+Direct ALSA remains the primary Phase 5 acceptance path because it performs physical loopback without manual host-graph intervention.
+
+The successful JACK physical result demonstrates hardware capability through JACK, but currently requires a manual connection to the transient PortAudio client during each validation run.
 
 ---
 
@@ -319,98 +332,149 @@ This result is useful because it demonstrates that the framework can execute, ca
 
 It is not classified as physical Scarlett loopback evidence.
 
+Later diagnostic testing confirmed that Scarlett `monitor_*` JACK ports can similarly produce a passing software-routed result.
+
+Those monitor-path results remain separate from the subsequently verified physical JACK loopback path.
+
 ---
 
-## JACK at 48 kHz — Physical Routing Attempt FAIL
+## JACK at 48 kHz — Physical Loopback with Manual Runtime Routing
 
-JACK was tested with the physical loopback cable connected.
+Post-Phase 5 diagnostic testing investigated the JACK physical-routing failure in more detail.
 
-A longer diagnostic run was used so that the PortAudio client remained visible in QjackCtl while validation was executing.
+The tested JACK environment was PipeWire-backed and exposed several Scarlett capture paths, including:
 
-The diagnostic configuration used:
-
-```yaml
-execution:
-  timeout_seconds: 25.0
-
-loopback:
-  signal_duration_seconds: 20.0
+```text
+capture_AUX0
+capture_AUX1
+capture_MONO
+monitor_FL
+monitor_FR
 ```
 
-The live JACK graph showed the PortAudio client connected to Scarlett playback and capture-side ports while the validation was running.
+The framework-created PortAudio JACK client was temporary and existed only while the duplex stream was active.
 
-The framework therefore successfully:
+### Default routing
 
-- created the JACK duplex stream;
-- generated the configured test signal;
-- routed playback into the JACK graph;
-- received capture frames from the JACK graph;
-- retained playback and capture evidence.
+With the automatically established JACK routing alone, the expected physical 1 kHz return was not captured at a valid level.
 
-However, the expected physical 1 kHz return was not present in the selected JACK capture path.
+Result: `FAIL`
 
-A final diagnostic run produced approximately:
+### `capture_MONO` replacing the default Input 1 route
+
+The physical Input 1 `capture_MONO` source was then connected directly to `PortAudio:in_0` after removing the original connection to that PortAudio input.
+
+This configuration also failed.
+
+A representative run produced approximately:
 
 ```text
 expected frequency:  1000.000 Hz
-measured frequency:  49.970 Hz
-frequency error:     950.030 Hz
+measured frequency:  0.250 Hz
+
+RMS:                 0.000002
+Peak:                0.000082
+Silence detected:    True
+Clipping detected:   False
+```
+
+### Default routing plus `capture_MONO`
+
+The successful topology retained the original PortAudio capture routing and additionally connected the physical Input 1 `capture_MONO` source to `PortAudio:in_0`
+
+The physical output route remained:
+
+```text
+PortAudio:out_0
+    ↓
+Scarlett playback_FL
+    ↓
+physical Output L
+```
+
+A representative successful run produced approximately:
+
+```text
+expected frequency:  1000.000 Hz
+measured frequency:  999.965 Hz
+frequency error:     0.035 Hz
 tolerance:           ±5.000 Hz
 
-RMS:                 0.000024
-Peak:                0.000115
-DC offset:           0.000008
+RMS:                 0.032995
+Peak:                0.046741
+DC offset:           0.000006
 Silence detected:    False
 Clipping detected:   False
 ```
 
-The validation failed on both:
+Result: `PASS`
+
+The retained playback, captured and analysed WAV evidence all contained the expected tone.
+
+### Physical-path verification
+
+The successful result was verified using cable A/B/A testing:
 
 ```text
-frequency outside configured tolerance
-RMS below configured minimum
+cable disconnected
+    → FAIL
+
+cable connected
+    → PASS
+
+cable disconnected
+    → FAIL
 ```
 
-The reported `Silence detected: False` does not indicate that the intended test signal was successfully captured.
+Changing the analogue Input 1 gain also changed the captured level while preserving the expected test frequency.
 
-The returned signal contained enough low-level energy to exceed the configured silence threshold, but its RMS level remained close to the noise floor and its dominant frequency was unrelated to the expected 1 kHz reference.
+These observations demonstrate that the passing JACK result depended on the physical Scarlett output → cable → input path rather than an internal software-only loopback.
 
-The retained evidence further isolated the behaviour:
+---
 
-```text
-playback.wav
-    → contains the expected 1 kHz test signal
+## Routing Evidence
 
-captured.wav
-    → contains only very low-level returned audio
+### Default routing — FAIL
 
-analysed.wav
-    → does not contain the expected 1 kHz reference at a valid level
-```
+The default PortAudio JACK graph did not return the expected physical loopback signal.
 
-This provides stronger evidence that the intended physical loopback signal is not reaching the selected JACK capture path.
+![JACK default routing](images/phase-5-jack-routing-default-fail.png)
 
-Because the same physical Scarlett output-to-input path passes through direct ALSA, the physical cable and analogue hardware path have been independently verified.
+The corresponding framework validation failed:
 
-The precise JACK capture-routing or port-mapping cause has not yet been established.
+![JACK default loopback failure](images/phase-5-jack-loopback-default-fail.png)
 
-Further JACK-specific investigation is deferred to a separate follow-up issue rather than blocking completion of Phase 5.
+### Manual physical-input addition — PASS
+
+Retaining the default capture routing and additionally connecting the physical Input 1 `capture_MONO` source to `PortAudio:in_0` produced the working physical topology:
+
+![JACK manual physical routing](images/phase-5-jack-routing-manual-pass.png)
+
+The corresponding validation passed:
+
+![JACK manual physical loopback pass](images/phase-5-jack-loopback-manual-pass.png)
+
+---
+
+### Runtime-routing limitation
+
+The working connection must currently be added manually after the framework starts.
+
+When validation finishes, the PortAudio JACK client closes and its ports disappear.
+
+The manually added connection therefore cannot persist between framework runs.
+
+Physical JACK loopback is consequently verified but is not currently an unattended/repeatable framework-only workflow.
+
+Detailed routing evidence and the remaining engineering questions are documented in [`jack-loopback-routing.md`](jack-loopback-routing.md).
 
 ---
 
 ## JACK at 44.1 kHz — Stream Rejected
 
-The JACK configuration was also tested at:
+The JACK configuration was also tested at `44,100 Hz`
 
-```text
-44,100 Hz
-```
-
-PortAudio rejected the stream settings before duplex execution with:
-
-```text
-Invalid sample rate
-```
+PortAudio rejected the stream settings before duplex execution with: `Invalid sample rate`
 
 The loopback validation therefore did not reach playback, capture or signal analysis.
 
@@ -526,42 +590,24 @@ PASS — software loopback only
 ```text
 stream opens
 PortAudio JACK client appears
-playback is routed toward Scarlett playback ports
-Scarlett capture-side ports are routed toward PortAudio inputs
-duplex executes
-playback evidence contains the 1 kHz test tone
-returned capture remains near the noise floor
-measured dominant frequency does not match the reference
-minimum-RMS validation fails
-frequency validation fails
+default JACK routing is established
+additional physical capture_MONO route is added manually
+physical cable carries the playback signal
+Scarlett physical input captures the signal
+alignment succeeds
+frequency validation passes
+sample-domain validation passes
 ```
 
 Result:
 
 ```text
-FAIL — expected physical JACK return not present
+PASS — verified physical loopback with manual runtime routing
 ```
 
-These results demonstrate that:
+Without the additional manual runtime connection, the tested JACK graph does not produce a valid physical loopback return.
 
-```text
-device discovered
-+
-stream opened
-+
-duplex execution completed
-```
-
-does not itself prove:
-
-```text
-physical output
-→ cable
-→ physical input
-→ valid captured signal
-```
-
-The end-to-end signal validation layer is what provides that assertion.
+The current limitation is therefore host-routing automation rather than inability to perform physical loopback through JACK.
 
 ---
 
@@ -570,21 +616,27 @@ The end-to-end signal validation layer is what provides that assertion.
 The final evidence supports the following conclusions:
 
 1. The Phase 5 loopback implementation successfully performs end-to-end physical hardware validation.
-2. Direct ALSA at 48 kHz is the verified physical loopback path for the tested Scarlett 2i2.
+2. Direct ALSA at 48 kHz remains the primary verified physical loopback path because it works without manual host-routing intervention.
 3. The Scarlett's reported 44.1 kHz ALSA default sample rate did not prevent a configured 48 kHz duplex stream from executing successfully.
 4. JACK at 48 kHz can successfully validate a software-routed loopback.
 5. A JACK software-loopback PASS must not be interpreted as proof that the signal travelled through the Scarlett analogue hardware path.
-6. With the physical cable connected and the PortAudio JACK client routed through the Scarlett graph, the selected JACK capture path returned only very low-level audio and did not recover the expected 1 kHz reference.
-7. The latest controlled JACK run measured approximately 49.97 Hz rather than 1 kHz and also failed the configured minimum-RMS requirement, providing stronger evidence that the intended physical return was absent from the selected capture path.
-8. The exact JACK capture-routing or port-mapping cause remains unresolved.
-9. The earlier ALSA failures were invalid as physical-loopback evidence because the physical loopback connection was incomplete.
-10. The tested JACK endpoint rejected 44.1 kHz before duplex execution.
-11. PortAudio device indexes are not stable enough to use as permanent hardware identifiers.
-12. The tested Windows device topology does not currently provide the single duplex Scarlett endpoint required by the Phase 5 implementation.
+6. Default JACK routing did not return the expected physical loopback signal at a valid captured level.
+7. Replacing the default Input 1 route with the physical `capture_MONO` source alone also failed.
+8. Retaining the default JACK capture routing and additionally connecting the physical Input 1 `capture_MONO` source to `PortAudio:in_0` produced a valid physical loopback PASS.
+9. Cable A/B/A testing demonstrated that the successful JACK result depended on the external physical loopback connection.
+10. Changing analogue input gain changed the captured signal level, providing additional evidence that the successful result traversed the Scarlett analogue input stage.
+11. The PortAudio JACK client is transient, so the required manual connection disappears when the validation stream closes.
+12. Physical JACK loopback is therefore verified but is not currently an unattended framework-only workflow.
+13. The reason the default capture route must remain alongside the additional `capture_MONO` connection has not yet been established.
+14. The tested JACK endpoint rejected a 44.1 kHz client stream during the earlier experiment.
+15. PortAudio device indexes and some JACK client identifiers are not stable enough to use as permanent hardware identifiers.
+16. The tested Windows device topology does not currently provide the single duplex Scarlett endpoint required by the Phase 5 implementation.
 
-The unresolved JACK hardware-routing behaviour will be investigated separately if required.
+The successful JACK diagnostics refine the earlier Phase 5 conclusion without changing its acceptance basis.
 
-It does not invalidate the successful direct-ALSA physical acceptance result.
+Direct ALSA at 48 kHz remains the primary unattended Phase 5 physical acceptance path.
+
+JACK-specific routing automation remains a follow-up engineering concern.
 
 ---
 
@@ -611,20 +663,13 @@ report.json
 
 This applies to both successful validations and completed validation failures.
 
-The evidence was also useful during the JACK investigation because it demonstrated that:
+The retained evidence was also useful during the JACK investigation.
 
-```text
-playback.wav
-```
+Failing routing configurations demonstrated that valid playback evidence could coexist with an absent or near-noise-floor physical return.
 
-contained the expected generated signal while:
+The final manually routed physical JACK configuration produced valid playback, captured and analysed WAV files containing the expected approximately 1 kHz signal.
 
-```text
-captured.wav
-analysed.wav
-```
-
-contained only the near-silent returned capture.
+This allowed routing failures and successful physical capture to be compared using the same framework-owned evidence format.
 
 Execution failures that occur before duplex capture, such as rejection of an unsupported sample rate, do not produce a completed loopback evidence bundle.
 
@@ -654,20 +699,23 @@ Phase 5 is therefore complete.
 
 ---
 
-## Follow-Up Investigation
+## JACK Routing Follow-Up
 
-A separate diagnostic issue may investigate the JACK Scarlett capture topology.
+The post-Phase 5 investigation established that physical JACK loopback is possible when the existing PortAudio capture routing is retained and the physical Input 1 `capture_MONO` source is additionally connected to `PortAudio:in_0`.
 
-Potential investigation areas include:
+The remaining work is therefore focused on routing automation and lifecycle rather than basic physical-path discovery.
 
-- mapping JACK-visible Scarlett capture ports to the physical analogue inputs;
-- determining the purpose of each exposed capture port;
-- checking JACK bridge routing;
-- testing JACK auto-connection behaviour;
-- determining whether PortAudio selects the intended Scarlett capture ports;
-- evaluating whether JACK-specific routing support belongs in the framework.
+Potential follow-up areas include:
 
-This work is deliberately outside the Phase 5 acceptance scope.
+- determining why the default capture route must remain alongside `capture_MONO`;
+- identifying which component establishes the default PortAudio JACK connections;
+- determining whether the required physical-input connection can be created automatically when the transient PortAudio client appears;
+- deciding whether JACK graph policy belongs in the framework or in host-environment configuration;
+- evaluating whether this work belongs alongside planned flexible endpoint selection.
+
+See [`jack-loopback-routing.md`](jack-loopback-routing.md) for the detailed diagnostic evidence.
+
+This work remains outside the completed Phase 5 acceptance scope.
 
 ---
 
