@@ -133,3 +133,54 @@ def test_load_loopback_configuration() -> None:
     assert config.loopback.amplitude == 0.25
     assert config.loopback.frequency_tolerance_hz == 5.0
     assert config.loopback.padding_seconds == 0.1
+
+
+def test_load_config_with_separate_device_selectors(
+    tmp_path: Path,
+) -> None:
+    config_file = tmp_path / "split_loopback.yaml"
+
+    config_file.write_text(
+        """
+device:
+  name_contains: "Focusrite USB Audio"
+  host_api_contains: "WASAPI"
+
+input_device:
+  exact_name: "Analogue 1 + 2 (Focusrite USB Audio)"
+  host_api_contains: "WASAPI"
+  minimum_input_channels: 2
+
+output_device:
+  exact_name: "Speakers (Focusrite USB Audio)"
+  host_api_contains: "WASAPI"
+  minimum_output_channels: 2
+
+stream:
+  sample_rate: 48000
+  input_channels: 2
+  output_channels: 2
+  block_size: 128
+  dtype: "float32"
+
+loopback:
+  output_channel: 0
+  input_channel: 0
+""",
+        encoding="utf-8",
+    )
+
+    config = load_config(config_file)
+
+    assert config.device.name_contains == "Focusrite USB Audio"
+    assert config.device.host_api_contains == "WASAPI"
+
+    assert config.input_device is not None
+    assert config.input_device.exact_name == "Analogue 1 + 2 (Focusrite USB Audio)"
+    assert config.input_device.host_api_contains == "WASAPI"
+    assert config.input_device.minimum_input_channels == 2
+
+    assert config.output_device is not None
+    assert config.output_device.exact_name == "Speakers (Focusrite USB Audio)"
+    assert config.output_device.host_api_contains == "WASAPI"
+    assert config.output_device.minimum_output_channels == 2

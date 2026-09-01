@@ -103,6 +103,9 @@ class FrameworkConfig(BaseModel):
     """Root configuration."""
 
     device: DeviceMatchConfig
+    input_device: DeviceMatchConfig | None = None
+    output_device: DeviceMatchConfig | None = None
+
     stream: StreamConfig
     execution: AudioExecutionConfig = Field(
         default_factory=AudioExecutionConfig,

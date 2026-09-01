@@ -370,6 +370,53 @@ def test_loopback_validation_config_accepts_zero_padding() -> None:
     assert config.padding_seconds == 0.0
 
 
+def test_framework_config_does_not_define_separate_devices_by_default() -> None:
+    config = FrameworkConfig(
+        device=DeviceMatchConfig(
+            name_contains="Scarlett",
+        ),
+        stream=StreamConfig(),
+    )
+
+    assert config.input_device is None
+    assert config.output_device is None
+
+
+def test_framework_config_accepts_separate_device_selectors() -> None:
+    shared_device = DeviceMatchConfig(
+        name_contains="Focusrite USB Audio",
+        host_api_contains="WASAPI",
+    )
+
+    input_device = DeviceMatchConfig(
+        exact_name="Analogue 1 + 2 (Focusrite USB Audio)",
+        host_api_contains="WASAPI",
+        minimum_input_channels=2,
+    )
+
+    output_device = DeviceMatchConfig(
+        exact_name="Speakers (Focusrite USB Audio)",
+        host_api_contains="WASAPI",
+        minimum_output_channels=2,
+    )
+
+    config = FrameworkConfig(
+        device=shared_device,
+        input_device=input_device,
+        output_device=output_device,
+        stream=StreamConfig(
+            sample_rate=48_000,
+            input_channels=2,
+            output_channels=2,
+        ),
+        loopback=LoopbackValidationConfig(),
+    )
+
+    assert config.device == shared_device
+    assert config.input_device == input_device
+    assert config.output_device == output_device
+
+
 def test_framework_config_does_not_enable_loopback_by_default() -> None:
     config = FrameworkConfig(
         device=DeviceMatchConfig(
