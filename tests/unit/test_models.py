@@ -10,10 +10,31 @@ from audio_hw_framework.device.models import (
     AudioExecutionConfig,
     DeviceDirection,
     DeviceMatchConfig,
+    DuplexEndpoints,
     FrameworkConfig,
     SampleDType,
     StreamConfig,
 )
+
+
+def create_endpoint(
+    *,
+    index: int,
+    name: str,
+    input_channels: int,
+    output_channels: int,
+) -> AudioDevice:
+    """Create an audio endpoint for duplex endpoint model tests."""
+
+    return AudioDevice(
+        index=index,
+        name=name,
+        host_api_index=0,
+        host_api_name="WASAPI",
+        max_input_channels=input_channels,
+        max_output_channels=output_channels,
+        default_sample_rate=48_000,
+    )
 
 
 def test_duplex_device_direction() -> None:
@@ -70,6 +91,69 @@ def test_device_with_no_channels_has_none_direction() -> None:
     )
 
     assert device.direction is DeviceDirection.NONE
+
+
+def test_duplex_endpoints_exposes_input_and_output_devices() -> None:
+    input_device = create_endpoint(
+        index=0,
+        name="Analogue 1 + 2 (Focusrite USB Audio)",
+        input_channels=2,
+        output_channels=0,
+    )
+
+    output_device = create_endpoint(
+        index=1,
+        name="Speakers (Focusrite USB Audio)",
+        input_channels=0,
+        output_channels=2,
+    )
+
+    endpoints = DuplexEndpoints(
+        input_device=input_device,
+        output_device=output_device,
+    )
+
+    assert endpoints.input_device == input_device
+    assert endpoints.output_device == output_device
+
+
+def test_duplex_endpoints_identifies_shared_device() -> None:
+    device = create_endpoint(
+        index=0,
+        name="Scarlett",
+        input_channels=2,
+        output_channels=2,
+    )
+
+    endpoints = DuplexEndpoints(
+        input_device=device,
+        output_device=device,
+    )
+
+    assert endpoints.uses_shared_device is True
+
+
+def test_duplex_endpoints_identifies_separate_devices() -> None:
+    input_device = create_endpoint(
+        index=0,
+        name="Analogue 1 + 2 (Focusrite USB Audio)",
+        input_channels=2,
+        output_channels=0,
+    )
+
+    output_device = create_endpoint(
+        index=1,
+        name="Speakers (Focusrite USB Audio)",
+        input_channels=0,
+        output_channels=2,
+    )
+
+    endpoints = DuplexEndpoints(
+        input_device=input_device,
+        output_device=output_device,
+    )
+
+    assert endpoints.uses_shared_device is False
 
 
 def test_stream_config_uses_float32_by_default() -> None:
