@@ -5,10 +5,15 @@ from audio_hw_framework.backend.base import (
     AudioBackend,
     AudioBackendError,
     BackendInfo,
+    BackendOperationNotSupportedError,
     StreamCapabilityError,
     StreamOpenError,
 )
-from audio_hw_framework.device.models import AudioDevice, StreamConfig
+from audio_hw_framework.device.models import (
+    AudioDevice,
+    DuplexEndpoints,
+    StreamConfig,
+)
 
 StreamKey = tuple[int, int, int, int, int | None, str]
 RecordingKey = tuple[int, int, int, int, str]
@@ -179,13 +184,20 @@ class FakeAudioBackend(AudioBackend):
 
     def duplex(
         self,
-        device: AudioDevice,
+        endpoints: DuplexEndpoints,
         config: StreamConfig,
         audio: AudioBuffer,
         *,
         timeout_seconds: float,
     ) -> AudioBuffer:
-        """Return deterministic capture data for finite duplex execution."""
+        """Perform deterministic duplex playback and capture."""
+
+        if not endpoints.uses_shared_device:
+            raise BackendOperationNotSupportedError(
+                "Fake backend does not yet support split-device duplex execution",
+            )
+
+        device = endpoints.input_device
 
         duplex_key = self._create_duplex_key(
             device,

@@ -8,11 +8,16 @@ from audio_hw_framework.backend.base import (
     AudioBackend,
     AudioBackendError,
     BackendInfo,
+    BackendOperationNotSupportedError,
     DeviceEnumerationError,
     StreamCapabilityError,
     StreamOpenError,
 )
-from audio_hw_framework.device.models import AudioDevice, StreamConfig
+from audio_hw_framework.device.models import (
+    AudioDevice,
+    DuplexEndpoints,
+    StreamConfig,
+)
 
 
 class SoundDeviceBackend(AudioBackend):
@@ -342,13 +347,20 @@ class SoundDeviceBackend(AudioBackend):
 
     def duplex(
         self,
-        device: AudioDevice,
+        endpoints: DuplexEndpoints,
         config: StreamConfig,
         audio: AudioBuffer,
         *,
         timeout_seconds: float,
     ) -> AudioBuffer:
         """Play audio while simultaneously capturing from a PortAudio stream."""
+
+        if not endpoints.uses_shared_device:
+            raise BackendOperationNotSupportedError(
+                "PortAudio backend does not yet support split-device duplex execution",
+            )
+
+        device = endpoints.input_device
 
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be greater than 0")

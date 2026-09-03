@@ -5,7 +5,10 @@ from audio_hw_framework.analysis import (
     measure_dominant_frequency,
 )
 from audio_hw_framework.backend.base import AudioBackend
-from audio_hw_framework.device.models import FrameworkConfig
+from audio_hw_framework.device.models import (
+    DuplexEndpoints,
+    FrameworkConfig,
+)
 from audio_hw_framework.signal import (
     SineWaveConfig,
     generate_sine_wave,
@@ -67,8 +70,13 @@ def validate_configured_loopback(
         padding_seconds=loopback.padding_seconds,
     )
 
+    endpoints = DuplexEndpoints(
+        input_device=device,
+        output_device=device,
+    )
+
     captured_audio = backend.duplex(
-        device,
+        endpoints,
         config.stream,
         playback_audio,
         timeout_seconds=config.execution.timeout_seconds,

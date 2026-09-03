@@ -4,11 +4,19 @@ import numpy as np
 import pytest
 
 from audio_hw_framework.audio import AudioBuffer
-from audio_hw_framework.backend.base import AudioBackendError
+from audio_hw_framework.backend.base import (
+    AudioBackendError,
+    BackendOperationNotSupportedError,
+)
 from audio_hw_framework.backend.fake_backend import FakeAudioBackend
-from audio_hw_framework.device.models import StreamConfig
+from audio_hw_framework.device.models import (
+    AudioDevice,
+    DuplexEndpoints,
+    StreamConfig,
+)
 from tests.unit.fake_backend_helpers import (
     create_duplex_key,
+    create_split_test_endpoints,
     create_test_device,
 )
 
@@ -30,6 +38,36 @@ def create_playback_audio(
     )
 
 
+def create_shared_endpoints(
+    device: AudioDevice,
+) -> DuplexEndpoints:
+    """Wrap one device as shared duplex endpoints."""
+
+    return DuplexEndpoints(
+        input_device=device,
+        output_device=device,
+    )
+
+
+def test_fake_backend_rejects_split_endpoints_until_supported() -> None:
+    config = StreamConfig(
+        sample_rate=48_000,
+        input_channels=2,
+        output_channels=2,
+    )
+
+    with pytest.raises(
+        BackendOperationNotSupportedError,
+        match="Fake backend does not yet support split-device duplex execution",
+    ):
+        FakeAudioBackend().duplex(
+            create_split_test_endpoints(),
+            config,
+            create_playback_audio(),
+            timeout_seconds=5.0,
+        )
+
+
 def test_fake_backend_duplex_returns_silent_capture_by_default() -> None:
     device = create_test_device()
     config = StreamConfig(
@@ -47,7 +85,7 @@ def test_fake_backend_duplex_returns_silent_capture_by_default() -> None:
     )
 
     result = FakeAudioBackend().duplex(
-        device,
+        create_shared_endpoints(device),
         config,
         audio,
         timeout_seconds=5.0,
@@ -94,7 +132,7 @@ def test_fake_backend_duplex_returns_configured_samples() -> None:
     )
 
     result = backend.duplex(
-        device,
+        create_shared_endpoints(device),
         config,
         playback_audio,
         timeout_seconds=5.0,
@@ -119,8 +157,10 @@ def test_fake_backend_duplex_returns_framework_owned_buffer() -> None:
         duplex_samples=configured_capture,
     )
 
+    device = create_test_device()
+
     result = backend.duplex(
-        create_test_device(),
+        create_shared_endpoints(device),
         StreamConfig(
             input_channels=2,
             output_channels=2,
@@ -158,7 +198,7 @@ def test_fake_backend_duplex_truncates_configured_samples() -> None:
     )
 
     result = backend.duplex(
-        device,
+        create_shared_endpoints(device),
         config,
         playback_audio,
         timeout_seconds=5.0,
@@ -196,7 +236,7 @@ def test_fake_backend_raises_configured_duplex_failure() -> None:
         match="Fake backend duplex execution failed for device index 0",
     ):
         backend.duplex(
-            device,
+            create_shared_endpoints(device),
             config,
             audio,
             timeout_seconds=5.0,
@@ -215,7 +255,7 @@ def test_fake_backend_duplex_requires_input_channels() -> None:
         match="Cannot perform duplex execution with no input channels",
     ):
         FakeAudioBackend().duplex(
-            device,
+            create_shared_endpoints(device),
             config,
             create_playback_audio(),
             timeout_seconds=5.0,
@@ -238,7 +278,7 @@ def test_fake_backend_duplex_requires_output_channels() -> None:
         match="Cannot perform duplex execution with no output channels",
     ):
         FakeAudioBackend().duplex(
-            device,
+            create_shared_endpoints(device),
             config,
             audio,
             timeout_seconds=5.0,
@@ -262,7 +302,7 @@ def test_fake_backend_duplex_rejects_playback_sample_rate_mismatch() -> None:
         match=("Duplex playback audio sample rate does not match the stream sample rate"),
     ):
         FakeAudioBackend().duplex(
-            device,
+            create_shared_endpoints(device),
             config,
             audio,
             timeout_seconds=5.0,
@@ -286,7 +326,7 @@ def test_fake_backend_duplex_rejects_playback_channel_count_mismatch() -> None:
         match=("Duplex playback audio channel count does not match the stream output channels"),
     ):
         FakeAudioBackend().duplex(
-            device,
+            create_shared_endpoints(device),
             config,
             audio,
             timeout_seconds=5.0,
@@ -316,7 +356,7 @@ def test_fake_backend_duplex_rejects_configured_sample_rate_mismatch() -> None:
         match="Configured duplex samples do not match the stream sample rate",
     ):
         backend.duplex(
-            device,
+            create_shared_endpoints(device),
             config,
             create_playback_audio(),
             timeout_seconds=5.0,
@@ -346,7 +386,7 @@ def test_fake_backend_duplex_rejects_configured_channel_count_mismatch() -> None
         match="Configured duplex samples do not match the stream input channels",
     ):
         backend.duplex(
-            device,
+            create_shared_endpoints(device),
             config,
             create_playback_audio(),
             timeout_seconds=5.0,
@@ -376,7 +416,7 @@ def test_fake_backend_duplex_rejects_short_configured_capture() -> None:
         match="Configured duplex samples contain fewer frames than playback audio",
     ):
         backend.duplex(
-            device,
+            create_shared_endpoints(device),
             config,
             create_playback_audio(),
             timeout_seconds=5.0,

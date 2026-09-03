@@ -14,6 +14,7 @@ from audio_hw_framework.backend.sounddevice_backend import (
 from audio_hw_framework.cli import app
 from audio_hw_framework.device.models import (
     AudioDevice,
+    DuplexEndpoints,
     StreamConfig,
 )
 from tests.unit.cli_helpers import (
@@ -98,13 +99,16 @@ def patch_loopback_backend(
 
     def fake_duplex(
         self: SoundDeviceBackend,
-        selected_device: AudioDevice,
+        endpoints: DuplexEndpoints,
         config: StreamConfig,
         audio: AudioBuffer,
         *,
         timeout_seconds: float,
     ) -> AudioBuffer:
-        assert selected_device == device
+        assert endpoints.input_device == device
+        assert endpoints.output_device == device
+        assert endpoints.uses_shared_device is True
+
         assert config.sample_rate == SAMPLE_RATE
         assert audio.channel_count == 2
         assert timeout_seconds == 5.0

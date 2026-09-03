@@ -9,10 +9,16 @@ import sounddevice as sd
 from pytest import MonkeyPatch
 
 from audio_hw_framework.audio import AudioBuffer
-from audio_hw_framework.backend.base import AudioBackendError
+from audio_hw_framework.backend.base import (
+    AudioBackendError,
+    BackendOperationNotSupportedError,
+)
 from audio_hw_framework.backend.sounddevice_backend import SoundDeviceBackend
 from audio_hw_framework.device.models import StreamConfig
-from tests.unit.sounddevice_backend_helpers import create_test_device
+from tests.unit.sounddevice_backend_helpers import (
+    create_shared_test_endpoints,
+    create_split_test_endpoints,
+)
 
 
 def create_playback_audio(
@@ -91,7 +97,7 @@ def test_duplex_executes_playback_and_capture(
     audio = create_playback_audio()
 
     result = SoundDeviceBackend().duplex(
-        create_test_device(),
+        create_shared_test_endpoints(),
         create_duplex_config(),
         audio,
         timeout_seconds=5.0,
@@ -173,7 +179,7 @@ def test_duplex_writes_complete_playback_buffer(
     )
 
     SoundDeviceBackend().duplex(
-        create_test_device(),
+        create_shared_test_endpoints(),
         create_duplex_config(),
         audio,
         timeout_seconds=5.0,
@@ -219,7 +225,7 @@ def test_duplex_uses_automatic_block_size(
     )
 
     SoundDeviceBackend().duplex(
-        create_test_device(),
+        create_shared_test_endpoints(),
         create_duplex_config(
             block_size=None,
         ),
@@ -246,7 +252,7 @@ def test_duplex_returns_empty_capture_for_empty_playback(
     )
 
     result = SoundDeviceBackend().duplex(
-        create_test_device(),
+        create_shared_test_endpoints(),
         create_duplex_config(),
         audio,
         timeout_seconds=5.0,
@@ -265,7 +271,7 @@ def test_duplex_rejects_zero_timeout() -> None:
         match="timeout_seconds must be greater than 0",
     ):
         SoundDeviceBackend().duplex(
-            create_test_device(),
+            create_shared_test_endpoints(),
             create_duplex_config(),
             create_playback_audio(),
             timeout_seconds=0.0,
@@ -278,10 +284,23 @@ def test_duplex_rejects_negative_timeout() -> None:
         match="timeout_seconds must be greater than 0",
     ):
         SoundDeviceBackend().duplex(
-            create_test_device(),
+            create_shared_test_endpoints(),
             create_duplex_config(),
             create_playback_audio(),
             timeout_seconds=-1.0,
+        )
+
+
+def test_duplex_rejects_split_endpoints_until_supported() -> None:
+    with pytest.raises(
+        BackendOperationNotSupportedError,
+        match="PortAudio backend does not yet support split-device duplex execution",
+    ):
+        SoundDeviceBackend().duplex(
+            create_split_test_endpoints(),
+            create_duplex_config(),
+            create_playback_audio(),
+            timeout_seconds=5.0,
         )
 
 
@@ -291,7 +310,7 @@ def test_duplex_requires_input_channels() -> None:
         match="Cannot perform duplex execution with no input channels",
     ):
         SoundDeviceBackend().duplex(
-            create_test_device(),
+            create_shared_test_endpoints(),
             create_duplex_config(
                 input_channels=0,
                 output_channels=2,
@@ -307,7 +326,7 @@ def test_duplex_requires_output_channels() -> None:
         match="Cannot perform duplex execution with no output channels",
     ):
         SoundDeviceBackend().duplex(
-            create_test_device(),
+            create_shared_test_endpoints(),
             create_duplex_config(
                 input_channels=2,
                 output_channels=0,
@@ -325,7 +344,7 @@ def test_duplex_rejects_playback_sample_rate_mismatch() -> None:
         match=("Duplex playback audio sample rate does not match the stream sample rate"),
     ):
         SoundDeviceBackend().duplex(
-            create_test_device(),
+            create_shared_test_endpoints(),
             create_duplex_config(),
             create_playback_audio(
                 sample_rate=44_100,
@@ -340,7 +359,7 @@ def test_duplex_rejects_playback_channel_count_mismatch() -> None:
         match=("Duplex playback audio channel count does not match the stream output channels"),
     ):
         SoundDeviceBackend().duplex(
-            create_test_device(),
+            create_shared_test_endpoints(),
             create_duplex_config(),
             create_playback_audio(
                 channel_count=1,
@@ -369,7 +388,7 @@ def test_duplex_reports_output_underflow(
         match="Output underflow during duplex execution",
     ):
         SoundDeviceBackend().duplex(
-            create_test_device(),
+            create_shared_test_endpoints(),
             create_duplex_config(),
             create_playback_audio(),
             timeout_seconds=5.0,
@@ -411,7 +430,7 @@ def test_duplex_reports_input_overflow(
         match="Input overflow during duplex execution",
     ):
         SoundDeviceBackend().duplex(
-            create_test_device(),
+            create_shared_test_endpoints(),
             create_duplex_config(),
             create_playback_audio(),
             timeout_seconds=5.0,
@@ -457,7 +476,7 @@ def test_duplex_times_out_when_no_frames_are_available(
         match="Duplex execution timed out for device index 0",
     ):
         SoundDeviceBackend().duplex(
-            create_test_device(),
+            create_shared_test_endpoints(),
             create_duplex_config(),
             create_playback_audio(),
             timeout_seconds=5.0,
@@ -491,7 +510,7 @@ def test_duplex_translates_portaudio_error(
         match="Could not perform duplex execution for device index 0",
     ):
         SoundDeviceBackend().duplex(
-            create_test_device(),
+            create_shared_test_endpoints(),
             create_duplex_config(),
             create_playback_audio(),
             timeout_seconds=5.0,
