@@ -120,7 +120,7 @@ def validate_configured_loopback(
 
     return LoopbackValidationResult(
         backend=backend.info,
-        device=endpoints.input_device,
+        endpoints=endpoints,
         stream=config.stream,
         output_channel=loopback.output_channel,
         input_channel=loopback.input_channel,

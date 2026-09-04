@@ -17,6 +17,7 @@ from audio_hw_framework.audio import (
 from audio_hw_framework.backend.base import BackendInfo
 from audio_hw_framework.device.models import (
     AudioDevice,
+    DuplexEndpoints,
     StreamConfig,
 )
 from audio_hw_framework.reporting import (
@@ -45,6 +46,43 @@ def create_audio(
             dtype=np.float32,
         ),
         sample_rate=48_000,
+    )
+
+
+def create_input_device() -> AudioDevice:
+    """Create the input endpoint used by reporting tests."""
+
+    return AudioDevice(
+        index=3,
+        name="Test Input Device",
+        host_api_index=2,
+        host_api_name="Test Host API",
+        max_input_channels=2,
+        max_output_channels=0,
+        default_sample_rate=44_100,
+    )
+
+
+def create_output_device() -> AudioDevice:
+    """Create the output endpoint used by reporting tests."""
+
+    return AudioDevice(
+        index=4,
+        name="Test Output Device",
+        host_api_index=2,
+        host_api_name="Test Host API",
+        max_input_channels=0,
+        max_output_channels=2,
+        default_sample_rate=48_000,
+    )
+
+
+def create_endpoints() -> DuplexEndpoints:
+    """Create split endpoints used by reporting tests."""
+
+    return DuplexEndpoints(
+        input_device=create_input_device(),
+        output_device=create_output_device(),
     )
 
 
@@ -81,15 +119,7 @@ def create_result(
             library="test-library",
             library_version="1.0",
         ),
-        device=AudioDevice(
-            index=3,
-            name="Test Duplex Device",
-            host_api_index=2,
-            host_api_name="Test Host API",
-            max_input_channels=2,
-            max_output_channels=2,
-            default_sample_rate=44_100,
-        ),
+        endpoints=create_endpoints(),
         stream=StreamConfig(
             sample_rate=48_000,
             input_channels=2,
@@ -166,14 +196,36 @@ def test_build_loopback_report_returns_passing_payload() -> None:
     assert "artifacts" not in payload
 
 
-def test_build_loopback_report_preserves_device_and_stream_sample_rates() -> None:
+def test_build_loopback_report_preserves_endpoint_and_stream_sample_rates() -> None:
     payload = build_loopback_report(
         create_result(),
     )
 
-    assert payload["device"]["default_sample_rate"] == 44_100
-
+    assert payload["endpoints"]["input"]["default_sample_rate"] == 44_100
+    assert payload["endpoints"]["output"]["default_sample_rate"] == 48_000
     assert payload["stream"]["sample_rate"] == 48_000
+
+
+def test_build_loopback_report_includes_exact_duplex_endpoints() -> None:
+    payload = build_loopback_report(
+        create_result(),
+    )
+
+    endpoints = payload["endpoints"]
+
+    assert endpoints["uses_shared_device"] is False
+
+    assert endpoints["input"]["index"] == 3
+    assert endpoints["input"]["name"] == "Test Input Device"
+    assert endpoints["input"]["host_api_name"] == "Test Host API"
+    assert endpoints["input"]["max_input_channels"] == 2
+    assert endpoints["input"]["max_output_channels"] == 0
+
+    assert endpoints["output"]["index"] == 4
+    assert endpoints["output"]["name"] == "Test Output Device"
+    assert endpoints["output"]["host_api_name"] == "Test Host API"
+    assert endpoints["output"]["max_input_channels"] == 0
+    assert endpoints["output"]["max_output_channels"] == 2
 
 
 def test_build_loopback_report_returns_failed_payload() -> None:
@@ -267,12 +319,15 @@ def test_save_loopback_evidence_writes_structured_report(
 
     assert payload["backend"]["name"] == "test-backend"
 
-    assert payload["device"]["name"] == "Test Duplex Device"
+    assert payload["endpoints"]["input"]["name"] == "Test Input Device"
+    assert payload["endpoints"]["input"]["host_api_name"] == "Test Host API"
 
-    assert payload["device"]["host_api_name"] == "Test Host API"
+    assert payload["endpoints"]["output"]["name"] == "Test Output Device"
+    assert payload["endpoints"]["output"]["host_api_name"] == "Test Host API"
+
+    assert payload["endpoints"]["uses_shared_device"] is False
 
     assert payload["frequency"]["expected_hz"] == 1_000.0
-
     assert payload["frequency"]["measured_hz"] == 1_000.0
 
     assert payload["failures"] == []

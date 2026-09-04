@@ -258,7 +258,9 @@ def test_validate_configured_loopback_returns_passing_result() -> None:
     assert result.passed is True
 
     assert result.backend.name == "fake"
-    assert result.device.name == "Scarlett"
+    assert result.endpoints.input_device.name == "Scarlett"
+    assert result.endpoints.output_device.name == "Scarlett"
+    assert result.endpoints.uses_shared_device is True
 
     assert result.output_channel == 1
     assert result.input_channel == 1
@@ -331,9 +333,10 @@ def test_validate_configured_loopback_uses_resolved_split_endpoints() -> None:
     assert opening_output_device == output_device
     assert opening_output_stream.input_channels == 0
     assert opening_output_stream.output_channels == 2
-
-    # Temporary compatibility field until the reporting migration.
-    assert result.device == input_device
+    assert result.endpoints == DuplexEndpoints(
+        input_device=input_device,
+        output_device=output_device,
+    )
 
 
 def test_validate_configured_loopback_preserves_shared_device_preflight() -> None:

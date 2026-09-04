@@ -235,9 +235,10 @@ def build_loopback_validation_table(
     table.add_column("Value")
 
     table.add_row("Backend", result.backend.name)
-    table.add_row("Device", result.device.name)
-    table.add_row("Device index", str(result.device.index))
-    table.add_row("Host API", result.device.host_api_name)
+    # Temporarily only uses input_device
+    table.add_row("Device", result.endpoints.input_device.name)
+    table.add_row("Device index", str(result.endpoints.input_device.index))
+    table.add_row("Host API", result.endpoints.input_device.host_api_name)
     table.add_row("Sample rate", f"{result.stream.sample_rate} Hz")
 
     table.add_row(

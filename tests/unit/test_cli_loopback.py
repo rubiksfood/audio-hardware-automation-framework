@@ -249,7 +249,11 @@ def test_validate_loopback_outputs_json(
 
     assert payload["backend"]["name"] == "portaudio"
 
-    assert payload["device"]["name"] == "Focusrite Scarlett 2i2 USB"
+    assert payload["endpoints"]["uses_shared_device"] is True
+
+    assert payload["endpoints"]["input"]["name"] == ("Focusrite Scarlett 2i2 USB")
+
+    assert payload["endpoints"]["output"]["name"] == ("Focusrite Scarlett 2i2 USB")
 
     assert payload["stream"]["sample_rate"] == SAMPLE_RATE
 
