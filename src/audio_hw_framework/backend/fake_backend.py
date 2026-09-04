@@ -5,7 +5,6 @@ from audio_hw_framework.backend.base import (
     AudioBackend,
     AudioBackendError,
     BackendInfo,
-    BackendOperationNotSupportedError,
     StreamCapabilityError,
     StreamOpenError,
 )
@@ -18,7 +17,7 @@ from audio_hw_framework.device.models import (
 StreamKey = tuple[int, int, int, int, int | None, str]
 RecordingKey = tuple[int, int, int, int, str]
 PlaybackKey = tuple[int, int, int, str]
-DuplexKey = tuple[int, int, int, int, int, str]
+DuplexKey = tuple[int, int, int, int, int, int, str]
 
 
 class FakeAudioBackend(AudioBackend):
@@ -192,22 +191,17 @@ class FakeAudioBackend(AudioBackend):
     ) -> AudioBuffer:
         """Perform deterministic duplex playback and capture."""
 
-        if not endpoints.uses_shared_device:
-            raise BackendOperationNotSupportedError(
-                "Fake backend does not yet support split-device duplex execution",
-            )
-
-        device = endpoints.input_device
-
         duplex_key = self._create_duplex_key(
-            device,
+            endpoints,
             config,
             audio,
         )
 
         if duplex_key in self._duplex_failures:
             raise AudioBackendError(
-                f"Fake backend duplex execution failed for device index {device.index}",
+                f"Fake backend duplex execution failed for "
+                f"input device index {endpoints.input_device.index} and "
+                f"output device index {endpoints.output_device.index}",
             )
 
         if config.input_channels == 0:
@@ -303,12 +297,13 @@ class FakeAudioBackend(AudioBackend):
 
     @staticmethod
     def _create_duplex_key(
-        device: AudioDevice,
+        endpoints: DuplexEndpoints,
         config: StreamConfig,
         audio: AudioBuffer,
     ) -> DuplexKey:
         return (
-            device.index,
+            endpoints.input_device.index,
+            endpoints.output_device.index,
             config.sample_rate,
             config.input_channels,
             config.output_channels,

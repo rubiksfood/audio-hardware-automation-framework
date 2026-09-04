@@ -4,10 +4,7 @@ import numpy as np
 import pytest
 
 from audio_hw_framework.audio import AudioBuffer
-from audio_hw_framework.backend.base import (
-    AudioBackendError,
-    BackendOperationNotSupportedError,
-)
+from audio_hw_framework.backend.base import AudioBackendError
 from audio_hw_framework.backend.fake_backend import FakeAudioBackend
 from audio_hw_framework.device.models import (
     AudioDevice,
@@ -49,23 +46,33 @@ def create_shared_endpoints(
     )
 
 
-def test_fake_backend_rejects_split_endpoints_until_supported() -> None:
+def test_fake_backend_duplex_supports_split_endpoints() -> None:
     config = StreamConfig(
         sample_rate=48_000,
         input_channels=2,
         output_channels=2,
     )
 
-    with pytest.raises(
-        BackendOperationNotSupportedError,
-        match="Fake backend does not yet support split-device duplex execution",
-    ):
-        FakeAudioBackend().duplex(
-            create_split_test_endpoints(),
-            config,
-            create_playback_audio(),
-            timeout_seconds=5.0,
-        )
+    audio = create_playback_audio()
+
+    result = FakeAudioBackend().duplex(
+        create_split_test_endpoints(),
+        config,
+        audio,
+        timeout_seconds=5.0,
+    )
+
+    assert result.sample_rate == 48_000
+    assert result.frame_count == audio.frame_count
+    assert result.channel_count == 2
+
+    np.testing.assert_array_equal(
+        result.samples,
+        np.zeros(
+            (audio.frame_count, 2),
+            dtype=np.float32,
+        ),
+    )
 
 
 def test_fake_backend_duplex_returns_silent_capture_by_default() -> None:
@@ -213,18 +220,20 @@ def test_fake_backend_duplex_truncates_configured_samples() -> None:
 
 
 def test_fake_backend_raises_configured_duplex_failure() -> None:
-    device = create_test_device()
+    endpoints = create_split_test_endpoints()
+
     config = StreamConfig(
         sample_rate=48_000,
         input_channels=2,
         output_channels=2,
     )
+
     audio = create_playback_audio()
 
     backend = FakeAudioBackend(
         duplex_failures={
             create_duplex_key(
-                device,
+                endpoints,
                 config,
                 audio,
             ),
@@ -233,14 +242,63 @@ def test_fake_backend_raises_configured_duplex_failure() -> None:
 
     with pytest.raises(
         AudioBackendError,
-        match="Fake backend duplex execution failed for device index 0",
+        match=(
+            "Fake backend duplex execution failed for "
+            "input device index 0 and output device index 1"
+        ),
     ):
         backend.duplex(
-            create_shared_endpoints(device),
+            endpoints,
             config,
             audio,
             timeout_seconds=5.0,
         )
+
+
+def test_fake_backend_duplex_failure_distinguishes_endpoint_pairs() -> None:
+    configured_endpoints = create_split_test_endpoints()
+
+    alternate_output = AudioDevice(
+        index=2,
+        name="Alternate Scarlett Output",
+        host_api_index=0,
+        host_api_name="WASAPI",
+        max_input_channels=0,
+        max_output_channels=2,
+        default_sample_rate=48_000,
+    )
+
+    alternate_endpoints = DuplexEndpoints(
+        input_device=configured_endpoints.input_device,
+        output_device=alternate_output,
+    )
+
+    config = StreamConfig(
+        sample_rate=48_000,
+        input_channels=2,
+        output_channels=2,
+    )
+
+    audio = create_playback_audio()
+
+    backend = FakeAudioBackend(
+        duplex_failures={
+            create_duplex_key(
+                configured_endpoints,
+                config,
+                audio,
+            ),
+        },
+    )
+
+    result = backend.duplex(
+        alternate_endpoints,
+        config,
+        audio,
+        timeout_seconds=5.0,
+    )
+
+    assert result.frame_count == audio.frame_count
 
 
 def test_fake_backend_duplex_requires_input_channels() -> None:

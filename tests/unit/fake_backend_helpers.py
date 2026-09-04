@@ -109,14 +109,15 @@ def create_playback_key(
 
 
 def create_duplex_key(
-    device: AudioDevice,
+    endpoints: DuplexEndpoints,
     config: StreamConfig,
     audio: AudioBuffer,
-) -> tuple[int, int, int, int, int, str]:
+) -> tuple[int, int, int, int, int, int, str]:
     """Create a fake backend duplex key."""
 
     return (
-        device.index,
+        endpoints.input_device.index,
+        endpoints.output_device.index,
         config.sample_rate,
         config.input_channels,
         config.output_channels,
