@@ -8,6 +8,7 @@ from audio_hw_framework.backend.base import AudioBackend
 from audio_hw_framework.device.models import (
     DuplexEndpoints,
     FrameworkConfig,
+    StreamConfig,
 )
 from audio_hw_framework.signal import (
     SineWaveConfig,
@@ -19,13 +20,13 @@ from audio_hw_framework.validation.audio_metrics import (
     MetricThresholdFailure,
     validate_audio_metrics,
 )
+from audio_hw_framework.validation.duplex_endpoints import (
+    resolve_duplex_endpoints,
+)
 from audio_hw_framework.validation.loopback_models import (
     LoopbackFrequencyResult,
     LoopbackValidationFailure,
     LoopbackValidationResult,
-)
-from audio_hw_framework.validation.service import (
-    validate_configured_stream,
 )
 
 
@@ -42,12 +43,18 @@ def validate_configured_loopback(
             "Loopback validation settings are required",
         )
 
-    stream_validation = validate_configured_stream(
-        backend=backend,
-        config=config,
+    devices = backend.list_devices()
+
+    endpoints = resolve_duplex_endpoints(
+        devices,
+        config,
     )
 
-    device = stream_validation.device
+    _validate_duplex_endpoint_streams(
+        backend,
+        endpoints,
+        config.stream,
+    )
 
     reference_audio = generate_sine_wave(
         SineWaveConfig(
@@ -68,11 +75,6 @@ def validate_configured_loopback(
     playback_audio = pad_signal(
         routed_audio,
         padding_seconds=loopback.padding_seconds,
-    )
-
-    endpoints = DuplexEndpoints(
-        input_device=device,
-        output_device=device,
     )
 
     captured_audio = backend.duplex(
@@ -118,7 +120,7 @@ def validate_configured_loopback(
 
     return LoopbackValidationResult(
         backend=backend.info,
-        device=device,
+        device=endpoints.input_device,
         stream=config.stream,
         output_channel=loopback.output_channel,
         input_channel=loopback.input_channel,
@@ -128,6 +130,76 @@ def validate_configured_loopback(
         frequency=frequency,
         metrics=metrics,
         failures=failures,
+    )
+
+
+def _validate_duplex_endpoint_streams(
+    backend: AudioBackend,
+    endpoints: DuplexEndpoints,
+    stream: StreamConfig,
+) -> None:
+    """Validate resolved endpoints before duplex execution."""
+
+    if endpoints.uses_shared_device:
+        backend.validate_stream_capability(
+            endpoints.input_device,
+            stream,
+        )
+
+        backend.validate_stream_opening(
+            endpoints.input_device,
+            stream,
+        )
+
+        return
+
+    input_stream = _create_directional_stream_config(
+        stream,
+        input_channels=stream.input_channels,
+        output_channels=0,
+    )
+
+    output_stream = _create_directional_stream_config(
+        stream,
+        input_channels=0,
+        output_channels=stream.output_channels,
+    )
+
+    backend.validate_stream_capability(
+        endpoints.input_device,
+        input_stream,
+    )
+
+    backend.validate_stream_capability(
+        endpoints.output_device,
+        output_stream,
+    )
+
+    backend.validate_stream_opening(
+        endpoints.input_device,
+        input_stream,
+    )
+
+    backend.validate_stream_opening(
+        endpoints.output_device,
+        output_stream,
+    )
+
+
+def _create_directional_stream_config(
+    stream: StreamConfig,
+    *,
+    input_channels: int,
+    output_channels: int,
+) -> StreamConfig:
+    """Create one directional view of a configured duplex stream."""
+
+    return StreamConfig(
+        sample_rate=stream.sample_rate,
+        input_channels=input_channels,
+        output_channels=output_channels,
+        block_size=stream.block_size,
+        dtype=stream.dtype,
     )
 
 
