@@ -8,7 +8,6 @@ from audio_hw_framework.backend.base import (
     AudioBackend,
     AudioBackendError,
     BackendInfo,
-    BackendOperationNotSupportedError,
     DeviceEnumerationError,
     StreamCapabilityError,
     StreamOpenError,
@@ -18,6 +17,20 @@ from audio_hw_framework.device.models import (
     DuplexEndpoints,
     StreamConfig,
 )
+
+
+def _describe_duplex_endpoints(
+    endpoints: DuplexEndpoints,
+) -> str:
+    """Describe the devices participating in duplex execution."""
+
+    if endpoints.uses_shared_device:
+        return f"device index {endpoints.input_device.index}"
+
+    return (
+        f"input device index {endpoints.input_device.index} and "
+        f"output device index {endpoints.output_device.index}"
+    )
 
 
 class SoundDeviceBackend(AudioBackend):
@@ -355,12 +368,12 @@ class SoundDeviceBackend(AudioBackend):
     ) -> AudioBuffer:
         """Play audio while simultaneously capturing from a PortAudio stream."""
 
-        if not endpoints.uses_shared_device:
-            raise BackendOperationNotSupportedError(
-                "PortAudio backend does not yet support split-device duplex execution",
-            )
+        input_device = endpoints.input_device
+        output_device = endpoints.output_device
 
-        device = endpoints.input_device
+        endpoint_description = _describe_duplex_endpoints(
+            endpoints,
+        )
 
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be greater than 0")
@@ -407,7 +420,10 @@ class SoundDeviceBackend(AudioBackend):
             stream = sd.Stream(
                 samplerate=config.sample_rate,
                 blocksize=block_size,
-                device=(device.index, device.index),
+                device=(
+                    input_device.index,
+                    output_device.index,
+                ),
                 channels=(
                     config.input_channels,
                     config.output_channels,
@@ -430,7 +446,7 @@ class SoundDeviceBackend(AudioBackend):
             while written_frames < audio.frame_count or captured_frames < audio.frame_count:
                 if time.monotonic() >= deadline:
                     raise AudioBackendError(
-                        f"Duplex execution timed out for device index {device.index}",
+                        f"Duplex execution timed out for {endpoint_description}",
                     )
 
                 made_progress = False
@@ -453,7 +469,7 @@ class SoundDeviceBackend(AudioBackend):
                         if underflowed:
                             raise AudioBackendError(
                                 "Output underflow during duplex execution "
-                                f"for device index {device.index}",
+                                f"for {endpoint_description}",
                             )
 
                         written_frames = end_frame
@@ -475,7 +491,7 @@ class SoundDeviceBackend(AudioBackend):
                         if overflowed:
                             raise AudioBackendError(
                                 "Input overflow during duplex execution "
-                                f"for device index {device.index}",
+                                f"for {endpoint_description}",
                             )
 
                         captured_chunks.append(data)
@@ -492,7 +508,7 @@ class SoundDeviceBackend(AudioBackend):
                 stream.abort(ignore_errors=True)
 
             raise AudioBackendError(
-                f"Could not perform duplex execution for device index {device.index}: {exc}",
+                f"Could not perform duplex execution for {endpoint_description}: {exc}",
             ) from exc
 
         except AudioBackendError:

@@ -9,10 +9,7 @@ import sounddevice as sd
 from pytest import MonkeyPatch
 
 from audio_hw_framework.audio import AudioBuffer
-from audio_hw_framework.backend.base import (
-    AudioBackendError,
-    BackendOperationNotSupportedError,
-)
+from audio_hw_framework.backend.base import AudioBackendError
 from audio_hw_framework.backend.sounddevice_backend import SoundDeviceBackend
 from audio_hw_framework.device.models import StreamConfig
 from tests.unit.sounddevice_backend_helpers import (
@@ -291,17 +288,65 @@ def test_duplex_rejects_negative_timeout() -> None:
         )
 
 
-def test_duplex_rejects_split_endpoints_until_supported() -> None:
-    with pytest.raises(
-        BackendOperationNotSupportedError,
-        match="PortAudio backend does not yet support split-device duplex execution",
-    ):
-        SoundDeviceBackend().duplex(
-            create_split_test_endpoints(),
-            create_duplex_config(),
-            create_playback_audio(),
-            timeout_seconds=5.0,
-        )
+def test_duplex_uses_separate_input_and_output_device_indexes(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    stream = Mock()
+
+    stream.write_available = 4
+    stream.read_available = 4
+    stream.write.return_value = False
+
+    captured_samples = np.zeros(
+        (4, 2),
+        dtype=np.float32,
+    )
+
+    stream.read.return_value = (
+        captured_samples,
+        False,
+    )
+
+    stream_factory = Mock(
+        return_value=stream,
+    )
+
+    monkeypatch.setattr(
+        sd,
+        "Stream",
+        stream_factory,
+    )
+
+    result = SoundDeviceBackend().duplex(
+        create_split_test_endpoints(),
+        create_duplex_config(),
+        create_playback_audio(),
+        timeout_seconds=5.0,
+    )
+
+    stream_factory.assert_called_once_with(
+        samplerate=48_000,
+        blocksize=128,
+        device=(0, 1),
+        channels=(2, 2),
+        dtype=("float32", "float32"),
+    )
+
+    stream.start.assert_called_once_with()
+    stream.stop.assert_called_once_with()
+    stream.abort.assert_not_called()
+    stream.close.assert_called_once_with(
+        ignore_errors=True,
+    )
+
+    assert result.sample_rate == 48_000
+    assert result.frame_count == 4
+    assert result.channel_count == 2
+
+    np.testing.assert_array_equal(
+        result.samples,
+        captured_samples,
+    )
 
 
 def test_duplex_requires_input_channels() -> None:
@@ -511,6 +556,35 @@ def test_duplex_translates_portaudio_error(
     ):
         SoundDeviceBackend().duplex(
             create_shared_test_endpoints(),
+            create_duplex_config(),
+            create_playback_audio(),
+            timeout_seconds=5.0,
+        )
+
+
+def test_duplex_translates_split_endpoint_portaudio_error(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    def raise_portaudio_error(
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        raise sd.PortAudioError("failure")
+
+    monkeypatch.setattr(
+        sd,
+        "Stream",
+        raise_portaudio_error,
+    )
+
+    with pytest.raises(
+        AudioBackendError,
+        match=(
+            "Could not perform duplex execution for input device index 0 and output device index 1"
+        ),
+    ):
+        SoundDeviceBackend().duplex(
+            create_split_test_endpoints(),
             create_duplex_config(),
             create_playback_audio(),
             timeout_seconds=5.0,
