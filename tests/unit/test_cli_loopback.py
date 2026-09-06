@@ -30,6 +30,77 @@ FREQUENCY_HZ = 1_000.0
 AMPLITUDE = 0.25
 
 
+def create_split_input_device() -> AudioDevice:
+    """Create the input-only device used by split-endpoint CLI tests."""
+
+    return AudioDevice(
+        index=0,
+        name="Focusrite Scarlett Input",
+        host_api_index=0,
+        host_api_name="WASAPI",
+        max_input_channels=2,
+        max_output_channels=0,
+        default_sample_rate=SAMPLE_RATE,
+    )
+
+
+def create_split_output_device() -> AudioDevice:
+    """Create the output-only device used by split-endpoint CLI tests."""
+
+    return AudioDevice(
+        index=1,
+        name="Focusrite Scarlett Output",
+        host_api_index=0,
+        host_api_name="WASAPI",
+        max_input_channels=0,
+        max_output_channels=2,
+        default_sample_rate=SAMPLE_RATE,
+    )
+
+
+def write_split_loopback_config(
+    path: Path,
+) -> None:
+    """Write a loopback configuration using separate input and output selectors."""
+
+    path.write_text(
+        """
+device:
+  name_contains: "Focusrite Scarlett"
+
+input_device:
+  exact_name: "Focusrite Scarlett Input"
+  host_api_contains: "WASAPI"
+  minimum_input_channels: 2
+
+output_device:
+  exact_name: "Focusrite Scarlett Output"
+  host_api_contains: "WASAPI"
+  minimum_output_channels: 2
+
+stream:
+  sample_rate: 48000
+  input_channels: 2
+  output_channels: 2
+  block_size: 128
+  dtype: "float32"
+
+execution:
+  timeout_seconds: 5.0
+
+loopback:
+  output_channel: 1
+  input_channel: 1
+  signal_duration_seconds: 0.01
+  frequency_hz: 1000.0
+  amplitude: 0.25
+  frequency_tolerance_hz: 5.0
+  padding_seconds: 0.001
+""",
+        encoding="utf-8",
+    )
+
+
 def create_loopback_capture(
     *,
     amplitude: float = AMPLITUDE,
@@ -140,6 +211,91 @@ def patch_loopback_backend(
     )
 
 
+def patch_split_loopback_backend(
+    monkeypatch: MonkeyPatch,
+    *,
+    captured_audio: AudioBuffer,
+) -> None:
+    """Configure split PortAudio endpoints for CLI tests."""
+
+    input_device = create_split_input_device()
+    output_device = create_split_output_device()
+
+    def fake_list_devices(
+        self: SoundDeviceBackend,
+    ) -> list[AudioDevice]:
+        return [
+            input_device,
+            output_device,
+        ]
+
+    def accept_stream(
+        self: SoundDeviceBackend,
+        selected_device: AudioDevice,
+        config: StreamConfig,
+    ) -> None:
+        if selected_device == input_device:
+            assert config.input_channels == 2
+            assert config.output_channels == 0
+
+        elif selected_device == output_device:
+            assert config.input_channels == 0
+            assert config.output_channels == 2
+
+        else:
+            raise AssertionError(
+                f"Unexpected device: {selected_device.name}",
+            )
+
+    def fake_duplex(
+        self: SoundDeviceBackend,
+        endpoints: DuplexEndpoints,
+        config: StreamConfig,
+        audio: AudioBuffer,
+        *,
+        timeout_seconds: float,
+    ) -> AudioBuffer:
+        assert endpoints == DuplexEndpoints(
+            input_device=input_device,
+            output_device=output_device,
+        )
+
+        assert endpoints.uses_shared_device is False
+
+        assert config.sample_rate == SAMPLE_RATE
+        assert config.input_channels == 2
+        assert config.output_channels == 2
+
+        assert audio.channel_count == 2
+        assert timeout_seconds == 5.0
+
+        return captured_audio
+
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "list_devices",
+        fake_list_devices,
+    )
+
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "validate_stream_capability",
+        accept_stream,
+    )
+
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "validate_stream_opening",
+        accept_stream,
+    )
+
+    monkeypatch.setattr(
+        SoundDeviceBackend,
+        "duplex",
+        fake_duplex,
+    )
+
+
 def test_validate_loopback_displays_success(
     monkeypatch: MonkeyPatch,
     tmp_path: Path,
@@ -168,10 +324,56 @@ def test_validate_loopback_displays_success(
 
     assert "Loopback validation passed" in result.stdout
     assert "Focusrite Scarlett 2i2 USB" in result.stdout
+    assert "Shared device" in result.stdout
+    assert "True" in result.stdout
+    assert "Input device" in result.stdout
+    assert "Output device" in result.stdout
     assert "Expected frequency" in result.stdout
     assert "Measured frequency" in result.stdout
     assert "RMS" in result.stdout
     assert "Peak" in result.stdout
+
+
+def test_validate_loopback_displays_split_endpoints(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "split-loopback.yaml"
+
+    write_split_loopback_config(
+        config_path,
+    )
+
+    patch_split_loopback_backend(
+        monkeypatch,
+        captured_audio=create_loopback_capture(),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "validate-loopback",
+            "--config",
+            str(config_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+
+    assert "Loopback validation passed" in result.stdout
+
+    assert "Shared device" in result.stdout
+    assert "False" in result.stdout
+
+    assert "Input device" in result.stdout
+    assert "Focusrite Scarlett Input" in result.stdout
+    assert "Input device index" in result.stdout
+
+    assert "Output device" in result.stdout
+    assert "Focusrite Scarlett Output" in result.stdout
+    assert "Output device index" in result.stdout
+
+    assert "WASAPI" in result.stdout
 
 
 def test_validate_loopback_returns_one_when_validation_fails(
@@ -275,6 +477,50 @@ def test_validate_loopback_outputs_json(
     assert payload["metrics"]["clipping"]["detected"] is False
 
     assert payload["failures"] == []
+
+
+def test_validate_loopback_outputs_split_endpoints_as_json(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "split-loopback.yaml"
+
+    write_split_loopback_config(
+        config_path,
+    )
+
+    patch_split_loopback_backend(
+        monkeypatch,
+        captured_audio=create_loopback_capture(),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "validate-loopback",
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+
+    payload = json.loads(
+        result.stdout,
+    )
+
+    assert payload["status"] == "passed"
+
+    assert payload["endpoints"]["uses_shared_device"] is False
+
+    assert payload["endpoints"]["input"]["index"] == 0
+    assert payload["endpoints"]["input"]["name"] == "Focusrite Scarlett Input"
+    assert payload["endpoints"]["input"]["host_api_name"] == "WASAPI"
+
+    assert payload["endpoints"]["output"]["index"] == 1
+    assert payload["endpoints"]["output"]["name"] == "Focusrite Scarlett Output"
+    assert payload["endpoints"]["output"]["host_api_name"] == "WASAPI"
 
 
 def test_validate_loopback_json_reports_structured_failures(

@@ -234,12 +234,42 @@ def build_loopback_validation_table(
     table.add_column("Setting")
     table.add_column("Value")
 
-    table.add_row("Backend", result.backend.name)
-    # Temporarily only uses input_device
-    table.add_row("Device", result.endpoints.input_device.name)
-    table.add_row("Device index", str(result.endpoints.input_device.index))
-    table.add_row("Host API", result.endpoints.input_device.host_api_name)
-    table.add_row("Sample rate", f"{result.stream.sample_rate} Hz")
+    table.add_row(
+        "Backend",
+        result.backend.name,
+    )
+    table.add_row(
+        "Shared device",
+        str(result.endpoints.uses_shared_device),
+    )
+    table.add_row(
+        "Input device",
+        result.endpoints.input_device.name,
+    )
+    table.add_row(
+        "Input device index",
+        str(result.endpoints.input_device.index),
+    )
+    table.add_row(
+        "Input host API",
+        result.endpoints.input_device.host_api_name,
+    )
+    table.add_row(
+        "Output device",
+        result.endpoints.output_device.name,
+    )
+    table.add_row(
+        "Output device index",
+        str(result.endpoints.output_device.index),
+    )
+    table.add_row(
+        "Output host API",
+        result.endpoints.output_device.host_api_name,
+    )
+    table.add_row(
+        "Sample rate",
+        f"{result.stream.sample_rate} Hz",
+    )
 
     table.add_row(
         "Output channel",
