@@ -4,9 +4,18 @@ import numpy as np
 import pytest
 
 from audio_hw_framework.audio import AudioBuffer
+from audio_hw_framework.backend.base import (
+    AudioBackendError,
+    StreamCapabilityError,
+    StreamOpenError,
+)
 from audio_hw_framework.backend.fake_backend import FakeAudioBackend
 from audio_hw_framework.configuration.loopback import (
     LoopbackValidationConfig,
+)
+from audio_hw_framework.device.matcher import (
+    AmbiguousDeviceMatchError,
+    DeviceNotFoundError,
 )
 from audio_hw_framework.device.models import (
     AudioDevice,
@@ -17,6 +26,10 @@ from audio_hw_framework.device.models import (
 )
 from audio_hw_framework.validation import (
     validate_configured_loopback,
+)
+from tests.unit.fake_backend_helpers import (
+    create_duplex_key,
+    create_stream_key,
 )
 
 SAMPLE_RATE = 8_000
@@ -337,6 +350,262 @@ def test_validate_configured_loopback_uses_resolved_split_endpoints() -> None:
         input_device=input_device,
         output_device=output_device,
     )
+
+
+def test_validate_configured_loopback_uses_shared_selector_as_input_fallback() -> None:
+    shared_device = create_test_device()
+
+    output_device = AudioDevice(
+        index=1,
+        name="External Output",
+        host_api_index=0,
+        host_api_name="Test API",
+        max_input_channels=0,
+        max_output_channels=2,
+        default_sample_rate=SAMPLE_RATE,
+    )
+
+    config = create_config().model_copy(
+        update={
+            "output_device": DeviceMatchConfig(
+                exact_name="External Output",
+            ),
+        }
+    )
+
+    backend = RecordingFakeAudioBackend(
+        devices=[
+            shared_device,
+            output_device,
+        ],
+        duplex_samples=create_capture(),
+    )
+
+    result = validate_configured_loopback(
+        backend,
+        config,
+    )
+
+    assert result.endpoints == DuplexEndpoints(
+        input_device=shared_device,
+        output_device=output_device,
+    )
+
+    assert result.endpoints.uses_shared_device is False
+    assert result.passed is True
+
+
+def test_validate_configured_loopback_rejects_missing_split_input_before_preflight() -> None:
+    output_device = create_test_output_device()
+
+    config = create_split_config().model_copy(
+        update={
+            "input_device": DeviceMatchConfig(
+                exact_name="Missing Input",
+            ),
+        }
+    )
+
+    backend = RecordingFakeAudioBackend(
+        devices=[
+            output_device,
+        ],
+        duplex_samples=create_capture(),
+    )
+
+    with pytest.raises(
+        DeviceNotFoundError,
+        match="No input device matched configuration",
+    ):
+        validate_configured_loopback(
+            backend,
+            config,
+        )
+
+    assert backend.capability_calls == []
+    assert backend.opening_calls == []
+    assert backend.duplex_endpoints is None
+
+
+def test_validate_configured_loopback_rejects_ambiguous_split_output_before_preflight() -> None:
+    input_device = create_test_input_device()
+
+    first_output = AudioDevice(
+        index=1,
+        name="Scarlett Output A",
+        host_api_index=0,
+        host_api_name="Test API",
+        max_input_channels=0,
+        max_output_channels=2,
+        default_sample_rate=SAMPLE_RATE,
+    )
+
+    second_output = AudioDevice(
+        index=2,
+        name="Scarlett Output B",
+        host_api_index=0,
+        host_api_name="Test API",
+        max_input_channels=0,
+        max_output_channels=2,
+        default_sample_rate=SAMPLE_RATE,
+    )
+
+    config = create_split_config().model_copy(
+        update={
+            "output_device": DeviceMatchConfig(
+                name_contains="Scarlett Output",
+            ),
+        }
+    )
+
+    backend = RecordingFakeAudioBackend(
+        devices=[
+            input_device,
+            first_output,
+            second_output,
+        ],
+        duplex_samples=create_capture(),
+    )
+
+    with pytest.raises(
+        AmbiguousDeviceMatchError,
+        match="Multiple output devices matched configuration",
+    ):
+        validate_configured_loopback(
+            backend,
+            config,
+        )
+
+    assert backend.capability_calls == []
+    assert backend.opening_calls == []
+    assert backend.duplex_endpoints is None
+
+
+def test_validate_configured_loopback_propagates_split_input_capability_failure() -> None:
+    input_device = create_test_input_device()
+    output_device = create_test_output_device()
+
+    input_stream = StreamConfig(
+        sample_rate=SAMPLE_RATE,
+        input_channels=2,
+        output_channels=0,
+    )
+
+    backend = FakeAudioBackend(
+        devices=[
+            input_device,
+            output_device,
+        ],
+        unsupported_streams={
+            create_stream_key(
+                input_device,
+                input_stream,
+            ),
+        },
+        duplex_samples=create_capture(),
+    )
+
+    with pytest.raises(
+        StreamCapabilityError,
+        match="Fake backend rejected stream configuration for device index 0",
+    ):
+        validate_configured_loopback(
+            backend,
+            create_split_config(),
+        )
+
+
+def test_validate_configured_loopback_propagates_split_output_opening_failure() -> None:
+    input_device = create_test_input_device()
+    output_device = create_test_output_device()
+
+    output_stream = StreamConfig(
+        sample_rate=SAMPLE_RATE,
+        input_channels=0,
+        output_channels=2,
+    )
+
+    backend = FakeAudioBackend(
+        devices=[
+            input_device,
+            output_device,
+        ],
+        stream_open_failures={
+            create_stream_key(
+                output_device,
+                output_stream,
+            ),
+        },
+        duplex_samples=create_capture(),
+    )
+
+    with pytest.raises(
+        StreamOpenError,
+        match="Fake backend could not open stream for device index 1",
+    ):
+        validate_configured_loopback(
+            backend,
+            create_split_config(),
+        )
+
+
+def test_validate_configured_loopback_propagates_split_duplex_failure() -> None:
+    input_device = create_test_input_device()
+    output_device = create_test_output_device()
+
+    endpoints = DuplexEndpoints(
+        input_device=input_device,
+        output_device=output_device,
+    )
+
+    config = create_split_config()
+
+    signal_frames = round(
+        SIGNAL_DURATION_SECONDS * SAMPLE_RATE,
+    )
+
+    padding_frames = round(
+        PADDING_SECONDS * SAMPLE_RATE,
+    )
+
+    playback_frame_count = signal_frames + (2 * padding_frames)
+
+    playback_audio = AudioBuffer(
+        samples=np.zeros(
+            (
+                playback_frame_count,
+                config.stream.output_channels,
+            ),
+            dtype=np.float32,
+        ),
+        sample_rate=SAMPLE_RATE,
+    )
+
+    backend = FakeAudioBackend(
+        devices=[
+            input_device,
+            output_device,
+        ],
+        duplex_failures={
+            create_duplex_key(
+                endpoints,
+                config.stream,
+                playback_audio,
+            ),
+        },
+    )
+
+    with pytest.raises(
+        AudioBackendError,
+        match=(
+            "Fake backend duplex execution failed for "
+            "input device index 0 and output device index 1"
+        ),
+    ):
+        validate_configured_loopback(
+            backend,
+            config,
+        )
 
 
 def test_validate_configured_loopback_preserves_shared_device_preflight() -> None:

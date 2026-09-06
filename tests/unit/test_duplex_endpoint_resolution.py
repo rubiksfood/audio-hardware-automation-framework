@@ -442,6 +442,80 @@ def test_raises_when_output_device_match_is_ambiguous() -> None:
         )
 
 
+def test_rejects_output_only_device_selected_as_input() -> None:
+    wrong_input = create_device(
+        index=0,
+        name="Output Only",
+        input_channels=0,
+        output_channels=2,
+    )
+
+    output_device = create_device(
+        index=1,
+        name="Valid Output",
+        input_channels=0,
+        output_channels=2,
+    )
+
+    config = create_config(
+        input_device=DeviceMatchConfig(
+            exact_name="Output Only",
+        ),
+        output_device=DeviceMatchConfig(
+            exact_name="Valid Output",
+        ),
+    )
+
+    with pytest.raises(
+        DuplexEndpointCapabilityError,
+        match=r"Input device 'Output Only' provides 0 input channels; 2 required",
+    ):
+        resolve_duplex_endpoints(
+            [
+                wrong_input,
+                output_device,
+            ],
+            config,
+        )
+
+
+def test_rejects_input_only_device_selected_as_output() -> None:
+    input_device = create_device(
+        index=0,
+        name="Valid Input",
+        input_channels=2,
+        output_channels=0,
+    )
+
+    wrong_output = create_device(
+        index=1,
+        name="Input Only",
+        input_channels=2,
+        output_channels=0,
+    )
+
+    config = create_config(
+        input_device=DeviceMatchConfig(
+            exact_name="Valid Input",
+        ),
+        output_device=DeviceMatchConfig(
+            exact_name="Input Only",
+        ),
+    )
+
+    with pytest.raises(
+        DuplexEndpointCapabilityError,
+        match=r"Output device 'Input Only' provides 0 output channels; 2 required",
+    ):
+        resolve_duplex_endpoints(
+            [
+                input_device,
+                wrong_output,
+            ],
+            config,
+        )
+
+
 def test_rejects_input_device_with_insufficient_channels() -> None:
     input_device = create_device(
         index=0,
