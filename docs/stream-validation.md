@@ -89,9 +89,13 @@ stream:
 
 The framework checks both directions and opens a duplex stream.
 
-A duplex configuration currently uses one matched PortAudio device index for both input and output. It therefore requires an endpoint that PortAudio reports as supporting both directions.
+The `validate-stream` command validates one matched PortAudio device at a time.
 
-Some host APIs expose separate input and output endpoints for the same physical interface. Those endpoints must currently be validated using separate input-only and output-only configurations.
+For a duplex `validate-stream` configuration, that one device must expose both the requested input and output capabilities.
+
+Some host APIs expose separate input and output endpoints for the same physical interface. Those endpoints can be checked individually with separate input-only and output-only `validate-stream` configurations.
+
+End-to-end `validate-loopback` additionally supports resolving separate input and output endpoints and attempting them together as one duplex execution. See [`loopback-validation.md`](loopback-validation.md) for split-endpoint configuration, validation behaviour and clock-domain limitations.
 
 ## Successful Output
 

@@ -240,7 +240,15 @@ audio-hw validate-loopback \
 
 (When `--evidence-dir` is supplied, the command retains `playback.wav`, `captured.wav`, `analysed.wav` and `report.json` for both passing and failing validations.)
 
-Hardware validation commands require exactly one matching device. Physical loopback additionally requires that the selected PortAudio device expose both input and output channels as one usable duplex endpoint. `analyse-audio` is file-based and does not perform device discovery or matching.
+Recording, playback and stream-validation commands require exactly one matching device.
+
+`analyse-audio` is file-based and does not perform device discovery or matching.
+
+Loopback validation can resolve either one shared PortAudio duplex device or separate input and output endpoints.
+
+Separate endpoints are useful on platforms such as Windows where one physical audio interface may be exposed as distinct input-only and output-only PortAudio devices.
+
+Support for separate endpoints does not imply that arbitrary physical devices are sample-clock synchronized. For reliable hardware validation, prefer endpoints belonging to the same physical interface and compatible host API/driver path.
 
 ---
 
@@ -373,10 +381,18 @@ Loopback validation supports:
 - Structured metric and channel failures
 - Human-readable and JSON CLI output
 - Optional WAV and JSON evidence retention
+- Backward-compatible shared-device duplex selection
+- Independent input and output device selectors
+- Host-API-aware endpoint matching
+- Direction and channel-capability validation
+- Separate PortAudio input and output device indexes
+- Exact input/output endpoint reporting in CLI and JSON evidence
+
+Split-endpoint execution is intended to support host APIs that expose one physical interface through separate capture and playback entries. Whether a particular endpoint pair can operate simultaneously remains dependent on PortAudio, the host API, the driver and the hardware clock topology.
+
+The framework does not provide cross-device clock synchronization or drift compensation.
 
 A physical loopback test requires a line-level connection between the selected hardware output and input.
-
-The current implementation requires one PortAudio device that exposes both input and output channels as a duplex endpoint. Host APIs that expose the same physical interface as separate input-only and output-only devices cannot currently execute physical loopback through this workflow.
 
 For the current Linux Focusrite validation environment, direct ALSA at 48 kHz is the verified unattended physical loopback path.
 
