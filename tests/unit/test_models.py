@@ -10,10 +10,31 @@ from audio_hw_framework.device.models import (
     AudioExecutionConfig,
     DeviceDirection,
     DeviceMatchConfig,
+    DuplexEndpoints,
     FrameworkConfig,
     SampleDType,
     StreamConfig,
 )
+
+
+def create_endpoint(
+    *,
+    index: int,
+    name: str,
+    input_channels: int,
+    output_channels: int,
+) -> AudioDevice:
+    """Create an audio endpoint for duplex endpoint model tests."""
+
+    return AudioDevice(
+        index=index,
+        name=name,
+        host_api_index=0,
+        host_api_name="WASAPI",
+        max_input_channels=input_channels,
+        max_output_channels=output_channels,
+        default_sample_rate=48_000,
+    )
 
 
 def test_duplex_device_direction() -> None:
@@ -70,6 +91,69 @@ def test_device_with_no_channels_has_none_direction() -> None:
     )
 
     assert device.direction is DeviceDirection.NONE
+
+
+def test_duplex_endpoints_exposes_input_and_output_devices() -> None:
+    input_device = create_endpoint(
+        index=0,
+        name="Analogue 1 + 2 (Focusrite USB Audio)",
+        input_channels=2,
+        output_channels=0,
+    )
+
+    output_device = create_endpoint(
+        index=1,
+        name="Speakers (Focusrite USB Audio)",
+        input_channels=0,
+        output_channels=2,
+    )
+
+    endpoints = DuplexEndpoints(
+        input_device=input_device,
+        output_device=output_device,
+    )
+
+    assert endpoints.input_device == input_device
+    assert endpoints.output_device == output_device
+
+
+def test_duplex_endpoints_identifies_shared_device() -> None:
+    device = create_endpoint(
+        index=0,
+        name="Scarlett",
+        input_channels=2,
+        output_channels=2,
+    )
+
+    endpoints = DuplexEndpoints(
+        input_device=device,
+        output_device=device,
+    )
+
+    assert endpoints.uses_shared_device is True
+
+
+def test_duplex_endpoints_identifies_separate_devices() -> None:
+    input_device = create_endpoint(
+        index=0,
+        name="Analogue 1 + 2 (Focusrite USB Audio)",
+        input_channels=2,
+        output_channels=0,
+    )
+
+    output_device = create_endpoint(
+        index=1,
+        name="Speakers (Focusrite USB Audio)",
+        input_channels=0,
+        output_channels=2,
+    )
+
+    endpoints = DuplexEndpoints(
+        input_device=input_device,
+        output_device=output_device,
+    )
+
+    assert endpoints.uses_shared_device is False
 
 
 def test_stream_config_uses_float32_by_default() -> None:
@@ -368,6 +452,53 @@ def test_loopback_validation_config_accepts_zero_padding() -> None:
     )
 
     assert config.padding_seconds == 0.0
+
+
+def test_framework_config_does_not_define_separate_devices_by_default() -> None:
+    config = FrameworkConfig(
+        device=DeviceMatchConfig(
+            name_contains="Scarlett",
+        ),
+        stream=StreamConfig(),
+    )
+
+    assert config.input_device is None
+    assert config.output_device is None
+
+
+def test_framework_config_accepts_separate_device_selectors() -> None:
+    shared_device = DeviceMatchConfig(
+        name_contains="Focusrite USB Audio",
+        host_api_contains="WASAPI",
+    )
+
+    input_device = DeviceMatchConfig(
+        exact_name="Analogue 1 + 2 (Focusrite USB Audio)",
+        host_api_contains="WASAPI",
+        minimum_input_channels=2,
+    )
+
+    output_device = DeviceMatchConfig(
+        exact_name="Speakers (Focusrite USB Audio)",
+        host_api_contains="WASAPI",
+        minimum_output_channels=2,
+    )
+
+    config = FrameworkConfig(
+        device=shared_device,
+        input_device=input_device,
+        output_device=output_device,
+        stream=StreamConfig(
+            sample_rate=48_000,
+            input_channels=2,
+            output_channels=2,
+        ),
+        loopback=LoopbackValidationConfig(),
+    )
+
+    assert config.device == shared_device
+    assert config.input_device == input_device
+    assert config.output_device == output_device
 
 
 def test_framework_config_does_not_enable_loopback_by_default() -> None:

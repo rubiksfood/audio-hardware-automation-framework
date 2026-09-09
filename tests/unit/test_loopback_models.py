@@ -8,7 +8,11 @@ from audio_hw_framework.analysis import (
 )
 from audio_hw_framework.audio import AudioBuffer
 from audio_hw_framework.backend.base import BackendInfo
-from audio_hw_framework.device.models import AudioDevice, StreamConfig
+from audio_hw_framework.device.models import (
+    AudioDevice,
+    DuplexEndpoints,
+    StreamConfig,
+)
 from audio_hw_framework.validation import (
     AudioMetricValidationResult,
     LoopbackFrequencyResult,
@@ -108,6 +112,17 @@ def create_device() -> AudioDevice:
     )
 
 
+def create_endpoints() -> DuplexEndpoints:
+    """Create shared endpoints used by loopback result tests."""
+
+    device = create_device()
+
+    return DuplexEndpoints(
+        input_device=device,
+        output_device=device,
+    )
+
+
 def test_loopback_frequency_result_calculates_absolute_error() -> None:
     result = LoopbackFrequencyResult(
         expected_hz=1_000.0,
@@ -175,7 +190,7 @@ def test_loopback_validation_result_passes_without_failures() -> None:
             library="internal",
             library_version=None,
         ),
-        device=create_device(),
+        endpoints=create_endpoints(),
         stream=StreamConfig(
             sample_rate=48_000,
             input_channels=2,
@@ -202,6 +217,8 @@ def test_loopback_validation_result_passes_without_failures() -> None:
     assert result.playback_audio is audio
     assert result.captured_audio is audio
     assert result.analysed_audio is audio
+    assert result.endpoints.uses_shared_device is True
+    assert result.endpoints.input_device == result.endpoints.output_device
 
 
 def test_loopback_validation_result_fails_with_failure() -> None:
@@ -222,7 +239,7 @@ def test_loopback_validation_result_fails_with_failure() -> None:
             library="internal",
             library_version=None,
         ),
-        device=create_device(),
+        endpoints=create_endpoints(),
         stream=StreamConfig(
             sample_rate=48_000,
             input_channels=2,
@@ -255,7 +272,7 @@ def test_loopback_validation_result_fails_when_frequency_fails() -> None:
             library="internal",
             library_version=None,
         ),
-        device=create_device(),
+        endpoints=create_endpoints(),
         stream=StreamConfig(
             sample_rate=48_000,
             input_channels=2,
@@ -287,7 +304,7 @@ def test_loopback_validation_result_fails_when_metrics_fail() -> None:
             library="internal",
             library_version=None,
         ),
-        device=create_device(),
+        endpoints=create_endpoints(),
         stream=StreamConfig(
             sample_rate=48_000,
             input_channels=2,

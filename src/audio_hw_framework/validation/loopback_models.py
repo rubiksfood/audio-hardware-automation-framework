@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from audio_hw_framework.audio import AudioBuffer
 from audio_hw_framework.backend.base import BackendInfo
-from audio_hw_framework.device.models import AudioDevice, StreamConfig
+from audio_hw_framework.device.models import DuplexEndpoints, StreamConfig
 from audio_hw_framework.validation.audio_metrics import AudioMetricValidationResult
 
 
@@ -46,7 +46,7 @@ class LoopbackValidationResult:
     """Complete result of an end-to-end loopback validation."""
 
     backend: BackendInfo
-    device: AudioDevice
+    endpoints: DuplexEndpoints
     stream: StreamConfig
 
     output_channel: int

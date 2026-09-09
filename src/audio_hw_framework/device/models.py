@@ -1,5 +1,6 @@
 """Typed models representing audio host APIs, devices and stream settings."""
 
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Self
@@ -59,6 +60,20 @@ class AudioDevice(BaseModel):
         return DeviceDirection.NONE
 
 
+@dataclass(frozen=True, slots=True)
+class DuplexEndpoints:
+    """Resolved input and output devices for duplex execution."""
+
+    input_device: AudioDevice
+    output_device: AudioDevice
+
+    @property
+    def uses_shared_device(self) -> bool:
+        """Return whether both directions use the same resolved device."""
+
+        return self.input_device == self.output_device
+
+
 class DeviceMatchConfig(BaseModel):
     """Tells framework what device is connected."""
 
@@ -103,6 +118,9 @@ class FrameworkConfig(BaseModel):
     """Root configuration."""
 
     device: DeviceMatchConfig
+    input_device: DeviceMatchConfig | None = None
+    output_device: DeviceMatchConfig | None = None
+
     stream: StreamConfig
     execution: AudioExecutionConfig = Field(
         default_factory=AudioExecutionConfig,

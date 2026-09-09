@@ -2,7 +2,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from audio_hw_framework.audio import AudioBuffer
-from audio_hw_framework.device.models import AudioDevice, StreamConfig
+from audio_hw_framework.device.models import (
+    AudioDevice,
+    DuplexEndpoints,
+    StreamConfig,
+)
 
 
 @dataclass(frozen=True)
@@ -92,7 +96,7 @@ class AudioBackend(ABC):
 
     def duplex(
         self,
-        device: AudioDevice,
+        endpoints: DuplexEndpoints,
         config: StreamConfig,
         audio: AudioBuffer,
         *,

@@ -60,6 +60,48 @@ The same physical interface therefore appeared multiple times during enumeration
 
 Configuration files are provided per host API to ensure deterministic device selection during testing.
 
+Loopback validation can select these PortAudio input and output endpoints independently using `input_device` and `output_device`.
+
+For example:
+
+```yaml
+device:
+  name_contains: "Focusrite USB Audio"
+
+input_device:
+  exact_name: "Analogue 1 + 2 (Focusrite USB Audio)"
+  host_api_contains: "WASAPI"
+  minimum_input_channels: 2
+
+output_device:
+  exact_name: "Speakers (Focusrite USB Audio)"
+  host_api_contains: "WASAPI"
+  minimum_output_channels: 2
+```
+
+The actual device names and indexes depend on the installed driver, Windows audio configuration and selected host API.
+
+Separate PortAudio entries do not necessarily represent independent physical hardware. Conversely, two endpoints being individually usable does not guarantee that PortAudio can open them together for duplex operation.
+
+The framework therefore validates each direction and then attempts the paired duplex stream through the backend.
+
+Phase 5.1 physical Scarlett testing produced the following results:
+
+| Host API | Independent input/output validation | Split-endpoint loopback |
+| --- | --- | --- |
+| WASAPI | PASS | PASS |
+| MME | PASS | PASS |
+| DirectSound | PASS | FAIL — duplex timeout |
+| Windows WDM-KS | FAIL — blocking API unsupported | Not executed |
+
+WASAPI and MME each completed three consecutive physical loopback runs using separate Scarlett input and output PortAudio indexes.
+
+DirectSound demonstrated that two individually usable endpoints do not necessarily form a usable duplex pair.
+
+WDM-KS was blocked during stream opening by PortAudio's `Blocking API not supported yet` error.
+
+These findings apply to the tested Scarlett 2i2, Focusrite driver, Windows system and PortAudio stack and should not be generalized to every device using the same host APIs.
+
 ---
 
 ### Linux
@@ -123,20 +165,28 @@ Currently implemented:
 
 - Audio device enumeration
 - Device metadata collection
-- Device matching
+- Host-API-aware device matching
 - CLI device inspection
 - JSON device reporting
-- Sample-rate capability validation before stream construction
-- Configured block-size validation before stream construction
+- Stream capability and opening validation
+- Finite audio recording
+- Finite audio playback
+- WAV import and export
+- Deterministic signal generation
+- Sample-domain audio analysis
+- Shared-device duplex execution
+- Split input/output endpoint duplex execution
+- End-to-end physical loopback validation
+- Captured-signal alignment
+- Frequency validation
+- Structured loopback evidence reporting
 
 Not yet implemented:
 
-- Audio playback
-- Audio recording
-- Loopback testing
-- Latency measurement
-- Long-duration stability testing
-- Driver validation
+- Measured round-trip latency validation
+- Long-duration stream stability testing
+- Clock-drift compensation between independent devices
+- Automated driver-version validation
 
 ---
 
@@ -151,6 +201,10 @@ Validated areas:
 - CLI inspection
 - Cross-platform enumeration
 - Windows WASAPI stream validation
+- Windows WASAPI physical split-endpoint loopback validation
+- Windows MME physical split-endpoint loopback validation
+- Windows DirectSound split-endpoint timeout characterization
+- Windows WDM-KS blocking-API limitation characterization
 - Linux ALSA duplex validation
 
 Operating systems tested:
@@ -238,6 +292,25 @@ Different host APIs may expose:
 - Different capabilities
 
 Framework users should verify behaviour on the specific platform and driver configuration being tested.
+
+---
+
+### Split-Endpoint Clock Compatibility
+
+Separate input and output endpoint selection does not provide sample-clock synchronization.
+
+Two endpoints belonging to the same physical interface may be synchronized internally by the hardware or driver even when the host API exposes them as separate PortAudio devices.
+
+Endpoints belonging to different physical devices may use independent clocks and can drift relative to one another.
+
+The framework currently does not:
+
+- synchronize independent hardware clocks;
+- compensate for clock drift;
+- resample one endpoint to follow another;
+- guarantee long-duration stability for arbitrary endpoint pairs.
+
+Successful duplex execution is therefore specific to the tested endpoint pair, host API, driver and hardware configuration.
 
 ---
 

@@ -9,7 +9,11 @@ from audio_hw_framework.backend.base import (
     BackendInfo,
     BackendOperationNotSupportedError,
 )
-from audio_hw_framework.device.models import AudioDevice, StreamConfig
+from audio_hw_framework.device.models import (
+    AudioDevice,
+    DuplexEndpoints,
+    StreamConfig,
+)
 
 
 class UnsupportedAudioBackend(AudioBackend):
@@ -55,6 +59,17 @@ def create_device() -> AudioDevice:
     )
 
 
+def create_endpoints() -> DuplexEndpoints:
+    """Create duplex endpoints used by backend contract tests."""
+
+    device = create_device()
+
+    return DuplexEndpoints(
+        input_device=device,
+        output_device=device,
+    )
+
+
 def create_audio() -> AudioBuffer:
     """Create playback audio used by backend contract tests."""
 
@@ -75,7 +90,7 @@ def test_duplex_execution_is_unsupported_by_default() -> None:
         match="unsupported backend does not support duplex execution",
     ):
         backend.duplex(
-            create_device(),
+            create_endpoints(),
             StreamConfig(
                 sample_rate=48_000,
                 input_channels=2,

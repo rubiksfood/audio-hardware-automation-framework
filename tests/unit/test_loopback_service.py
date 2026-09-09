@@ -4,18 +4,32 @@ import numpy as np
 import pytest
 
 from audio_hw_framework.audio import AudioBuffer
+from audio_hw_framework.backend.base import (
+    AudioBackendError,
+    StreamCapabilityError,
+    StreamOpenError,
+)
 from audio_hw_framework.backend.fake_backend import FakeAudioBackend
 from audio_hw_framework.configuration.loopback import (
     LoopbackValidationConfig,
 )
+from audio_hw_framework.device.matcher import (
+    AmbiguousDeviceMatchError,
+    DeviceNotFoundError,
+)
 from audio_hw_framework.device.models import (
     AudioDevice,
     DeviceMatchConfig,
+    DuplexEndpoints,
     FrameworkConfig,
     StreamConfig,
 )
 from audio_hw_framework.validation import (
     validate_configured_loopback,
+)
+from tests.unit.fake_backend_helpers import (
+    create_duplex_key,
+    create_stream_key,
 )
 
 SAMPLE_RATE = 8_000
@@ -23,6 +37,74 @@ SIGNAL_DURATION_SECONDS = 0.1
 PADDING_SECONDS = 0.05
 FREQUENCY_HZ = 1_000.0
 AMPLITUDE = 0.25
+
+
+class RecordingFakeAudioBackend(FakeAudioBackend):
+    """Fake backend that records duplex endpoint validation calls."""
+
+    def __init__(
+        self,
+        *,
+        devices: list[AudioDevice],
+        duplex_samples: AudioBuffer,
+    ) -> None:
+        super().__init__(
+            devices=devices,
+            duplex_samples=duplex_samples,
+        )
+
+        self.capability_calls: list[tuple[AudioDevice, StreamConfig]] = []
+
+        self.opening_calls: list[tuple[AudioDevice, StreamConfig]] = []
+
+        self.duplex_endpoints: DuplexEndpoints | None = None
+
+    def validate_stream_capability(
+        self,
+        device: AudioDevice,
+        config: StreamConfig,
+    ) -> None:
+        self.capability_calls.append((
+            device,
+            config,
+        ))
+
+        super().validate_stream_capability(
+            device,
+            config,
+        )
+
+    def validate_stream_opening(
+        self,
+        device: AudioDevice,
+        config: StreamConfig,
+    ) -> None:
+        self.opening_calls.append((
+            device,
+            config,
+        ))
+
+        super().validate_stream_opening(
+            device,
+            config,
+        )
+
+    def duplex(
+        self,
+        endpoints: DuplexEndpoints,
+        config: StreamConfig,
+        audio: AudioBuffer,
+        *,
+        timeout_seconds: float,
+    ) -> AudioBuffer:
+        self.duplex_endpoints = endpoints
+
+        return super().duplex(
+            endpoints,
+            config,
+            audio,
+            timeout_seconds=timeout_seconds,
+        )
 
 
 def create_test_device() -> AudioDevice:
@@ -39,6 +121,34 @@ def create_test_device() -> AudioDevice:
     )
 
 
+def create_test_input_device() -> AudioDevice:
+    """Create the input-only endpoint used by split loopback tests."""
+
+    return AudioDevice(
+        index=0,
+        name="Scarlett Input",
+        host_api_index=0,
+        host_api_name="Test API",
+        max_input_channels=2,
+        max_output_channels=0,
+        default_sample_rate=SAMPLE_RATE,
+    )
+
+
+def create_test_output_device() -> AudioDevice:
+    """Create the output-only endpoint used by split loopback tests."""
+
+    return AudioDevice(
+        index=1,
+        name="Scarlett Output",
+        host_api_index=0,
+        host_api_name="Test API",
+        max_input_channels=0,
+        max_output_channels=2,
+        default_sample_rate=SAMPLE_RATE,
+    )
+
+
 def create_config() -> FrameworkConfig:
     """Create a valid configured loopback test."""
 
@@ -46,6 +156,40 @@ def create_config() -> FrameworkConfig:
         device=DeviceMatchConfig(
             name_contains="Scarlett",
             minimum_input_channels=2,
+            minimum_output_channels=2,
+        ),
+        stream=StreamConfig(
+            sample_rate=SAMPLE_RATE,
+            input_channels=2,
+            output_channels=2,
+        ),
+        loopback=LoopbackValidationConfig(
+            output_channel=1,
+            input_channel=1,
+            signal_duration_seconds=SIGNAL_DURATION_SECONDS,
+            frequency_hz=FREQUENCY_HZ,
+            amplitude=AMPLITUDE,
+            frequency_tolerance_hz=5.0,
+            padding_seconds=PADDING_SECONDS,
+        ),
+    )
+
+
+def create_split_config() -> FrameworkConfig:
+    """Create a loopback configuration with separate endpoint selectors."""
+
+    return FrameworkConfig(
+        device=DeviceMatchConfig(
+            name_contains="Scarlett",
+        ),
+        input_device=DeviceMatchConfig(
+            exact_name="Scarlett Input",
+            host_api_contains="Test API",
+            minimum_input_channels=2,
+        ),
+        output_device=DeviceMatchConfig(
+            exact_name="Scarlett Output",
+            host_api_contains="Test API",
             minimum_output_channels=2,
         ),
         stream=StreamConfig(
@@ -127,7 +271,9 @@ def test_validate_configured_loopback_returns_passing_result() -> None:
     assert result.passed is True
 
     assert result.backend.name == "fake"
-    assert result.device.name == "Scarlett"
+    assert result.endpoints.input_device.name == "Scarlett"
+    assert result.endpoints.output_device.name == "Scarlett"
+    assert result.endpoints.uses_shared_device is True
 
     assert result.output_channel == 1
     assert result.input_channel == 1
@@ -147,6 +293,354 @@ def test_validate_configured_loopback_returns_passing_result() -> None:
     assert result.frequency.passed is True
     assert result.metrics.passed is True
     assert result.failures == ()
+
+
+def test_validate_configured_loopback_uses_resolved_split_endpoints() -> None:
+    input_device = create_test_input_device()
+    output_device = create_test_output_device()
+
+    backend = RecordingFakeAudioBackend(
+        devices=[
+            input_device,
+            output_device,
+        ],
+        duplex_samples=create_capture(),
+    )
+
+    result = validate_configured_loopback(
+        backend,
+        create_split_config(),
+    )
+
+    assert result.passed is True
+
+    assert backend.duplex_endpoints == DuplexEndpoints(
+        input_device=input_device,
+        output_device=output_device,
+    )
+
+    assert len(backend.capability_calls) == 2
+
+    capability_input_device, capability_input_stream = backend.capability_calls[0]
+
+    capability_output_device, capability_output_stream = backend.capability_calls[1]
+
+    assert capability_input_device == input_device
+    assert capability_input_stream.input_channels == 2
+    assert capability_input_stream.output_channels == 0
+
+    assert capability_output_device == output_device
+    assert capability_output_stream.input_channels == 0
+    assert capability_output_stream.output_channels == 2
+
+    assert len(backend.opening_calls) == 2
+
+    opening_input_device, opening_input_stream = backend.opening_calls[0]
+
+    opening_output_device, opening_output_stream = backend.opening_calls[1]
+
+    assert opening_input_device == input_device
+    assert opening_input_stream.input_channels == 2
+    assert opening_input_stream.output_channels == 0
+
+    assert opening_output_device == output_device
+    assert opening_output_stream.input_channels == 0
+    assert opening_output_stream.output_channels == 2
+    assert result.endpoints == DuplexEndpoints(
+        input_device=input_device,
+        output_device=output_device,
+    )
+
+
+def test_validate_configured_loopback_uses_shared_selector_as_input_fallback() -> None:
+    shared_device = create_test_device()
+
+    output_device = AudioDevice(
+        index=1,
+        name="External Output",
+        host_api_index=0,
+        host_api_name="Test API",
+        max_input_channels=0,
+        max_output_channels=2,
+        default_sample_rate=SAMPLE_RATE,
+    )
+
+    config = create_config().model_copy(
+        update={
+            "output_device": DeviceMatchConfig(
+                exact_name="External Output",
+            ),
+        }
+    )
+
+    backend = RecordingFakeAudioBackend(
+        devices=[
+            shared_device,
+            output_device,
+        ],
+        duplex_samples=create_capture(),
+    )
+
+    result = validate_configured_loopback(
+        backend,
+        config,
+    )
+
+    assert result.endpoints == DuplexEndpoints(
+        input_device=shared_device,
+        output_device=output_device,
+    )
+
+    assert result.endpoints.uses_shared_device is False
+    assert result.passed is True
+
+
+def test_validate_configured_loopback_rejects_missing_split_input_before_preflight() -> None:
+    output_device = create_test_output_device()
+
+    config = create_split_config().model_copy(
+        update={
+            "input_device": DeviceMatchConfig(
+                exact_name="Missing Input",
+            ),
+        }
+    )
+
+    backend = RecordingFakeAudioBackend(
+        devices=[
+            output_device,
+        ],
+        duplex_samples=create_capture(),
+    )
+
+    with pytest.raises(
+        DeviceNotFoundError,
+        match="No input device matched configuration",
+    ):
+        validate_configured_loopback(
+            backend,
+            config,
+        )
+
+    assert backend.capability_calls == []
+    assert backend.opening_calls == []
+    assert backend.duplex_endpoints is None
+
+
+def test_validate_configured_loopback_rejects_ambiguous_split_output_before_preflight() -> None:
+    input_device = create_test_input_device()
+
+    first_output = AudioDevice(
+        index=1,
+        name="Scarlett Output A",
+        host_api_index=0,
+        host_api_name="Test API",
+        max_input_channels=0,
+        max_output_channels=2,
+        default_sample_rate=SAMPLE_RATE,
+    )
+
+    second_output = AudioDevice(
+        index=2,
+        name="Scarlett Output B",
+        host_api_index=0,
+        host_api_name="Test API",
+        max_input_channels=0,
+        max_output_channels=2,
+        default_sample_rate=SAMPLE_RATE,
+    )
+
+    config = create_split_config().model_copy(
+        update={
+            "output_device": DeviceMatchConfig(
+                name_contains="Scarlett Output",
+            ),
+        }
+    )
+
+    backend = RecordingFakeAudioBackend(
+        devices=[
+            input_device,
+            first_output,
+            second_output,
+        ],
+        duplex_samples=create_capture(),
+    )
+
+    with pytest.raises(
+        AmbiguousDeviceMatchError,
+        match="Multiple output devices matched configuration",
+    ):
+        validate_configured_loopback(
+            backend,
+            config,
+        )
+
+    assert backend.capability_calls == []
+    assert backend.opening_calls == []
+    assert backend.duplex_endpoints is None
+
+
+def test_validate_configured_loopback_propagates_split_input_capability_failure() -> None:
+    input_device = create_test_input_device()
+    output_device = create_test_output_device()
+
+    input_stream = StreamConfig(
+        sample_rate=SAMPLE_RATE,
+        input_channels=2,
+        output_channels=0,
+    )
+
+    backend = FakeAudioBackend(
+        devices=[
+            input_device,
+            output_device,
+        ],
+        unsupported_streams={
+            create_stream_key(
+                input_device,
+                input_stream,
+            ),
+        },
+        duplex_samples=create_capture(),
+    )
+
+    with pytest.raises(
+        StreamCapabilityError,
+        match="Fake backend rejected stream configuration for device index 0",
+    ):
+        validate_configured_loopback(
+            backend,
+            create_split_config(),
+        )
+
+
+def test_validate_configured_loopback_propagates_split_output_opening_failure() -> None:
+    input_device = create_test_input_device()
+    output_device = create_test_output_device()
+
+    output_stream = StreamConfig(
+        sample_rate=SAMPLE_RATE,
+        input_channels=0,
+        output_channels=2,
+    )
+
+    backend = FakeAudioBackend(
+        devices=[
+            input_device,
+            output_device,
+        ],
+        stream_open_failures={
+            create_stream_key(
+                output_device,
+                output_stream,
+            ),
+        },
+        duplex_samples=create_capture(),
+    )
+
+    with pytest.raises(
+        StreamOpenError,
+        match="Fake backend could not open stream for device index 1",
+    ):
+        validate_configured_loopback(
+            backend,
+            create_split_config(),
+        )
+
+
+def test_validate_configured_loopback_propagates_split_duplex_failure() -> None:
+    input_device = create_test_input_device()
+    output_device = create_test_output_device()
+
+    endpoints = DuplexEndpoints(
+        input_device=input_device,
+        output_device=output_device,
+    )
+
+    config = create_split_config()
+
+    signal_frames = round(
+        SIGNAL_DURATION_SECONDS * SAMPLE_RATE,
+    )
+
+    padding_frames = round(
+        PADDING_SECONDS * SAMPLE_RATE,
+    )
+
+    playback_frame_count = signal_frames + (2 * padding_frames)
+
+    playback_audio = AudioBuffer(
+        samples=np.zeros(
+            (
+                playback_frame_count,
+                config.stream.output_channels,
+            ),
+            dtype=np.float32,
+        ),
+        sample_rate=SAMPLE_RATE,
+    )
+
+    backend = FakeAudioBackend(
+        devices=[
+            input_device,
+            output_device,
+        ],
+        duplex_failures={
+            create_duplex_key(
+                endpoints,
+                config.stream,
+                playback_audio,
+            ),
+        },
+    )
+
+    with pytest.raises(
+        AudioBackendError,
+        match=(
+            "Fake backend duplex execution failed for "
+            "input device index 0 and output device index 1"
+        ),
+    ):
+        validate_configured_loopback(
+            backend,
+            config,
+        )
+
+
+def test_validate_configured_loopback_preserves_shared_device_preflight() -> None:
+    device = create_test_device()
+
+    backend = RecordingFakeAudioBackend(
+        devices=[device],
+        duplex_samples=create_capture(),
+    )
+
+    config = create_config()
+
+    validate_configured_loopback(
+        backend,
+        config,
+    )
+
+    assert backend.capability_calls == [
+        (
+            device,
+            config.stream,
+        ),
+    ]
+
+    assert backend.opening_calls == [
+        (
+            device,
+            config.stream,
+        ),
+    ]
+
+    assert backend.duplex_endpoints == DuplexEndpoints(
+        input_device=device,
+        output_device=device,
+    )
 
 
 def test_validate_configured_loopback_routes_and_pads_playback() -> None:

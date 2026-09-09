@@ -10,7 +10,7 @@ This project demonstrates QA automation, hardware testing, configuration-driven 
 
 ## Project Status
 
-**Phase 5 complete — end-to-end physical loopback validation**
+**Phase 5.1 complete — split-endpoint physical loopback validation**
 
 Completed capabilities include:
 
@@ -240,7 +240,15 @@ audio-hw validate-loopback \
 
 (When `--evidence-dir` is supplied, the command retains `playback.wav`, `captured.wav`, `analysed.wav` and `report.json` for both passing and failing validations.)
 
-Hardware validation commands require exactly one matching device. Physical loopback additionally requires that the selected PortAudio device expose both input and output channels as one usable duplex endpoint. `analyse-audio` is file-based and does not perform device discovery or matching.
+Recording, playback and stream-validation commands require exactly one matching device.
+
+`analyse-audio` is file-based and does not perform device discovery or matching.
+
+Loopback validation can resolve either one shared PortAudio duplex device or separate input and output endpoints.
+
+Separate endpoints are useful on platforms such as Windows where one physical audio interface may be exposed as distinct input-only and output-only PortAudio devices.
+
+Support for separate endpoints does not imply that arbitrary physical devices are sample-clock synchronized. For reliable hardware validation, prefer endpoints belonging to the same physical interface and compatible host API/driver path.
 
 ---
 
@@ -373,10 +381,18 @@ Loopback validation supports:
 - Structured metric and channel failures
 - Human-readable and JSON CLI output
 - Optional WAV and JSON evidence retention
+- Backward-compatible shared-device duplex selection
+- Independent input and output device selectors
+- Host-API-aware endpoint matching
+- Direction and channel-capability validation
+- Separate PortAudio input and output device indexes
+- Exact input/output endpoint reporting in CLI and JSON evidence
+
+Split-endpoint execution is intended to support host APIs that expose one physical interface through separate capture and playback entries. Whether a particular endpoint pair can operate simultaneously remains dependent on PortAudio, the host API, the driver and the hardware clock topology.
+
+The framework does not provide cross-device clock synchronization or drift compensation.
 
 A physical loopback test requires a line-level connection between the selected hardware output and input.
-
-The current implementation requires one PortAudio device that exposes both input and output channels as a duplex endpoint. Host APIs that expose the same physical interface as separate input-only and output-only devices cannot currently execute physical loopback through this workflow.
 
 For the current Linux Focusrite validation environment, direct ALSA at 48 kHz is the verified unattended physical loopback path.
 
@@ -494,20 +510,19 @@ audio-hardware-automation-framework/
 │   │
 │   ├── scarlett_windows_mme_input.yaml
 │   ├── scarlett_windows_mme_output.yaml
-│   │
 │   ├── scarlett_windows_directsound_input.yaml
 │   ├── scarlett_windows_directsound_output.yaml
-│   │
 │   ├── scarlett_windows_wasapi_input.yaml
 │   ├── scarlett_windows_wasapi_output.yaml
-│   │
 │   ├── scarlett_windows_wdmks_input.yaml
 │   ├── scarlett_windows_wdmks_output.yaml
 │   │
+│   ├── scarlett_windows_mme_loopback.yaml
+│   ├── scarlett_windows_directsound_loopback.yaml
+│   ├── scarlett_windows_wasapi_loopback.yaml
+│   │
 │   ├── scarlett_linux_alsa.yaml
-│   │
 │   ├── scarlett_linux_jack.yaml
-│   │
 │   ├── scarlett_linux_pulseaudio_input1.yaml
 │   ├── scarlett_linux_pulseaudio_input2.yaml
 │   └── scarlett_linux_pulseaudio_output.yaml
@@ -540,13 +555,18 @@ audio-hardware-automation-framework/
 │       ├── phase-5-alsa-physical-loopback.png
 │       ├── phase-5-evidence-bundle.png
 │       ├── phase-5-jack-loopback-fail.png
+│       ├── phase-5-jack-loopback-default-fail.png
+│       ├── phase-5-jack-loopback-manual-pass.png
 │       ├── phase-5-jack-routing.png
-│       ├── phase-5-loopback-json.png
-│       ├── phase-5-pytest-coverage.png
 │       ├── phase-5-jack-routing-default-fail.png
 │       ├── phase-5-jack-routing-manual-pass.png
-│       ├── phase-5-jack-loopback-default-fail.png
-│       └── phase-5-jack-loopback-manual-pass.png
+│       ├── phase-5-loopback-json.png
+│       ├── phase-5-pytest-coverage.png
+│       ├── phase-5.1-windows-device-discovery.png
+│       ├── phase-5.1-windows-wasapi-pass.png
+│       ├── phase-5.1-windows-mme-pass.png
+│       ├── phase-5.1-windows-directsound-timeout.png
+│       └── phase-5.1-windows-wdmks-blocking-api.png
 │
 ├── src/
 │   └── audio_hw_framework/
@@ -576,6 +596,7 @@ audio-hardware-automation-framework/
 │       ├── configuration/
 │       │   ├── __init__.py
 │       │   ├── loader.py
+│       │   ├── loopback.py
 │       │   └── thresholds.py
 │       │
 │       ├── device/
@@ -604,6 +625,7 @@ audio-hardware-automation-framework/
 │       ├── validation/
 │       │   ├── __init__.py
 │       │   ├── audio_metrics.py
+│       │   ├── duplex_endpoints.py
 │       │   ├── loopback_models.py
 │       │   ├── loopback_service.py
 │       │   └── service.py
@@ -635,6 +657,7 @@ audio-hardware-automation-framework/
 │       ├── test_dc_offset.py
 │       ├── test_detection.py
 │       ├── test_device_matching.py
+│       ├── test_duplex_endpoint_resolution.py
 │       ├── test_fake_backend_duplex.py
 │       ├── test_fake_backend_playback.py
 │       ├── test_fake_backend_recording.py
@@ -839,6 +862,11 @@ Current validation:
 - RMS, peak, DC-offset, silence and clipping validation
 - WAV and JSON loopback evidence retention
 - JACK and ALSA host-API comparison
+- Verified Windows physical split-endpoint loopback through WASAPI
+- Verified Windows physical split-endpoint loopback through MME
+- Three-run repeatability validation for WASAPI and MME
+- DirectSound split-endpoint duplex-timeout characterization
+- WDM-KS blocking-stream API limitation characterization
 
 Phase 5 and follow-up loopback findings:
 
@@ -849,11 +877,19 @@ Phase 5 and follow-up loopback findings:
 | Linux / JACK / 48 kHz / default routing | FAIL | Expected physical return not captured at a valid level |
 | Linux / JACK / 48 kHz / `capture_MONO` replacing default route | FAIL | Physical source alone was insufficient in the tested graph |
 | Linux / JACK / 48 kHz / default routing + `capture_MONO` | PASS | Verified physical loopback; requires manual per-run graph modification |
-| Windows | Not executed | No suitable single Scarlett duplex PortAudio endpoint was available |
+| Windows / Phase 5 | Not executed | Scarlett input/output were exposed separately and the original architecture required one duplex device |
+| Windows / WASAPI / Phase 5.1 | PASS | Verified physical split-endpoint loopback; three consecutive passing runs |
+| Windows / MME / Phase 5.1 | PASS | Verified physical split-endpoint loopback; three consecutive passing runs |
+| Windows / DirectSound / Phase 5.1 | FAIL | Individual endpoints passed, but paired duplex execution timed out |
+| Windows / WDM-KS / Phase 5.1 | BLOCKED | PortAudio reported `Blocking API not supported yet` during stream opening |
 
 The direct ALSA 48 kHz run remains the Phase 5 physical hardware acceptance result because it operates without manual host-routing intervention.
 
 The JACK follow-up demonstrates that physical loopback is also possible through JACK, while identifying a remaining transient-client routing limitation.
+
+Phase 5.1 additionally verifies physical Windows split-endpoint loopback through WASAPI and MME.
+
+The Windows results also demonstrate that host APIs exposing the same physical hardware can behave differently: DirectSound timed out during paired execution and WDM-KS was blocked before duplex execution.
 
 See [`docs/focusrite-loopback-validation.md`](docs/focusrite-loopback-validation.md) for the detailed Phase 5 hardware results and interpretation.
 
@@ -985,7 +1021,11 @@ Records:
 - analogue gain/output-level observations
 - transient PortAudio JACK client limitation
 - correction of invalid preliminary incomplete-loopback ALSA results
-- Windows duplex-endpoint limitation
+- Windows Phase 5 single-device duplex limitation
+- Phase 5.1 Windows split-endpoint physical validation
+- WASAPI and MME physical split-endpoint PASS results
+- DirectSound duplex-timeout characterization
+- WDM-KS blocking-API limitation
 - measured frequency and sample-domain results
 - host-API and routing comparison
 - evidence interpretation

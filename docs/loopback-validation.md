@@ -60,15 +60,141 @@ Physical loopback validation requires:
 
 - an audio interface with at least one input and one output;
 - a suitable line-level cable;
-- a PortAudio device exposing both input and output channels;
-- a host API capable of opening the selected device as a duplex stream;
+- PortAudio-visible input and output endpoints;
+- a host API and driver capable of opening the selected endpoints for simultaneous capture and playback;
 - matching framework configuration for the selected host API and channel layout.
 
-The current duplex implementation uses one PortAudio device for both capture and playback.
+The input and output may be exposed as either:
 
-A platform or host API that exposes the physical interface as separate input-only and output-only devices cannot currently be used for physical loopback validation.
+- one shared PortAudio device supporting both directions; or
+- separate PortAudio input and output endpoints.
 
-This limitation is separate from recording and playback validation, which can operate through different input-only and output-only device entries.
+Legacy configurations using only `device` continue to resolve one shared duplex device.
+
+Platforms or host APIs that expose separate input-only and output-only endpoints can instead configure `input_device` and `output_device` independently.
+
+---
+
+## Duplex Endpoint Selection
+
+Loopback validation supports both shared-device and split-endpoint configurations.
+
+### Shared Device
+
+Existing configurations remain supported:
+
+```yaml
+device:
+  name_contains: "Scarlett"
+  minimum_input_channels: 2
+  minimum_output_channels: 2
+
+stream:
+  sample_rate: 48000
+  input_channels: 2
+  output_channels: 2
+  block_size: 128
+  dtype: float32
+```
+
+When neither `input_device` nor `output_device` is configured, the framework resolves `device` exactly once and requires that matched device to provide the configured input and output channel counts.
+
+This preserves the original single-device duplex workflow.
+
+### Separate Input and Output Endpoints
+
+A host API may expose the same physical interface through separate PortAudio endpoints.
+
+For example, a Windows audio interface may appear as:
+
+```text
+Input:
+Analogue 1 + 2 (Focusrite USB Audio)
+
+Output:
+Speakers (Focusrite USB Audio)
+```
+
+A split-endpoint loopback configuration can select them independently:
+
+```yaml
+device:
+  name_contains: "Focusrite USB Audio"
+
+input_device:
+  exact_name: "Analogue 1 + 2 (Focusrite USB Audio)"
+  host_api_contains: "WASAPI"
+  minimum_input_channels: 2
+
+output_device:
+  exact_name: "Speakers (Focusrite USB Audio)"
+  host_api_contains: "WASAPI"
+  minimum_output_channels: 2
+
+stream:
+  sample_rate: 48000
+  input_channels: 2
+  output_channels: 2
+  block_size: 128
+  dtype: float32
+```
+
+The framework resolves the input and output selectors independently and passes their distinct PortAudio device indexes to the duplex backend.
+
+Device indexes are runtime values and should not be stored directly in configuration. Use device names, host API matching and channel requirements to select endpoints deterministically.
+
+### Selector Fallback
+
+`device` remains mandatory for backward compatibility and also acts as the fallback selector.
+
+The effective selectors are:
+
+```text
+input  = input_device  if configured, otherwise device
+output = output_device if configured, otherwise device
+```
+
+This permits configurations that override only one direction.
+
+For example:
+
+```yaml
+device:
+  exact_name: "Shared Duplex Device"
+
+output_device:
+  exact_name: "Separate Output Device"
+```
+
+uses `device` for input selection and `output_device` for output selection.
+
+As soon as either directional selector is configured, input and output resolution is performed independently.
+
+### Direction and Channel Validation
+
+Endpoint resolution validates the configured direction before duplex execution.
+
+The selected input endpoint must provide at least:
+
+```text
+stream.input_channels
+```
+
+input channels.
+
+The selected output endpoint must provide at least:
+
+```text
+stream.output_channels
+```
+
+output channels.
+
+An output-only endpoint cannot therefore be selected as the input endpoint, and an input-only endpoint cannot be selected as the output endpoint.
+
+Ambiguous selectors and selectors that match no usable endpoint are rejected before audio execution begins.
+
+Host API matching can be used to distinguish otherwise similar endpoint names.
 
 ---
 
@@ -266,8 +392,11 @@ audio-hw validate-loopback \
 Human-readable output reports:
 
 - selected backend;
-- device;
-- host API;
+- whether the loopback uses one shared device;
+- input device name and index;
+- input host API;
+- output device name and index;
+- output host API;
 - sample rate;
 - input and output channels;
 - expected frequency;
@@ -303,7 +432,7 @@ The JSON result contains:
 ```text
 status
 backend
-device
+endpoints
 stream
 routing
 audio
@@ -365,8 +494,8 @@ Structured evidence containing:
 
 - validation status;
 - backend information;
-- device metadata;
-- device-reported default sample rate;
+- resolved input and output endpoint metadata;
+- endpoint-reported default sample rates;
 - configured stream settings;
 - channel routing;
 - audio dimensions;
@@ -378,6 +507,48 @@ Structured evidence containing:
 Evidence is saved for both passing and failing validations.
 
 A validation failure therefore does not discard the captured audio that produced the failure.
+
+### Endpoint Reporting
+
+Loopback results report the resolved input and output endpoints separately.
+
+Human-readable output includes:
+
+```text
+Shared device       False
+Input device        Analogue 1 + 2 (Focusrite USB Audio)
+Input device index  3
+Input host API      WASAPI
+Output device       Speakers (Focusrite USB Audio)
+Output device index 7
+Output host API     WASAPI
+```
+
+For a legacy shared-device configuration, both endpoint entries identify the same resolved device and `Shared device` is `True`.
+
+JSON and saved evidence use an `endpoints` object, for example:
+
+```json
+{
+  "endpoints": {
+    "uses_shared_device": false,
+    "input": {
+      "index": 3,
+      "name": "Analogue 1 + 2 (Focusrite USB Audio)",
+      "host_api_name": "WASAPI"
+    },
+    "output": {
+      "index": 7,
+      "name": "Speakers (Focusrite USB Audio)",
+      "host_api_name": "WASAPI"
+    }
+  }
+}
+```
+
+The complete endpoint objects also include the PortAudio-reported channel capabilities, default sample rate and default-device flags.
+
+Recording the exact resolved endpoints is important because PortAudio device indexes and host API exposure can change between systems, driver versions and reboots.
 
 ---
 
@@ -485,6 +656,32 @@ The structured validation result should be interpreted as a whole.
 
 Physical loopback support depends on the device topology presented by the operating system and host API.
 
+### Split Endpoints and Clock Domains
+
+Support for separate PortAudio input and output endpoints means that the framework can attempt duplex execution using different PortAudio device indexes.
+
+It does **not** mean that arbitrary physical audio devices are guaranteed to share a sample clock.
+
+When the selected endpoints belong to the same physical interface and driver, the driver or host API may provide the synchronization required for stable duplex operation even though PortAudio exposes separate input and output entries.
+
+When the endpoints belong to different physical devices, each device may run from an independent hardware clock.
+
+Independent clocks can drift relative to one another during capture and playback. Depending on the host API, driver and hardware, this may result in:
+
+- PortAudio rejecting the endpoint pair;
+- stream-opening failure;
+- input overflow or output underflow;
+- gradual timing drift;
+- changing alignment over longer captures;
+- dropped or repeated samples;
+- unstable long-duration loopback behaviour.
+
+The framework does not currently perform clock synchronization, sample-rate conversion or drift compensation between independent devices.
+
+For physical validation, prefer input and output endpoints belonging to the same physical interface, driver and host API unless the hardware is externally synchronized or the platform audio stack explicitly provides synchronization.
+
+A successful loopback run demonstrates that the selected endpoint pair worked for that validation run. It should not be interpreted as proof that arbitrary endpoint combinations are clock-compatible or stable for unlimited duration.
+
 ### Linux
 
 A physical interface may be exposed through ALSA, JACK, PulseAudio or other PortAudio-visible routes.
@@ -520,9 +717,30 @@ Direct ALSA therefore remains the preferred unattended physical loopback path fo
 
 Some Windows audio drivers expose the same physical interface as separate input and output PortAudio devices rather than one duplex device.
 
-The current loopback backend requires a single PortAudio device index with both input and output channels.
+Loopback validation can resolve those input and output endpoints independently and pass their distinct PortAudio device indexes to the duplex backend.
 
-Where no such endpoint exists, physical loopback validation cannot currently run through that host API even though separate recording and playback validation remain available.
+Whether a particular endpoint pair can be opened simultaneously remains dependent on PortAudio, the selected Windows host API, the installed driver and the hardware topology.
+
+Physical split-endpoint validation was completed using a Focusrite Scarlett 2i2 (3rd Gen).
+
+On the tested Windows system:
+
+```text
+WASAPI      → PASS
+MME         → PASS
+DirectSound → duplex execution timeout
+WDM-KS      → blocking stream API unsupported
+```
+
+WASAPI and MME both completed physical output-to-input loopback using separate PortAudio input and output indexes and each passed three consecutive validation runs.
+
+The DirectSound endpoints passed independent stream validation but timed out when combined for duplex execution.
+
+WDM-KS did not reach duplex execution because PortAudio reported `Blocking API not supported yet` during stream opening.
+
+These results demonstrate that split-endpoint capability remains dependent on the selected host API and driver even when both directional endpoints are individually usable.
+
+Detailed results are recorded in [focusrite-loopback-validation.md](focusrite-loopback-validation.md).
 
 ---
 

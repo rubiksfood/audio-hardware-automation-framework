@@ -43,9 +43,15 @@ def build_loopback_report(
             "library": result.backend.library,
             "library_version": result.backend.library_version,
         },
-        "device": result.device.model_dump(
-            mode="json",
-        ),
+        "endpoints": {
+            "uses_shared_device": result.endpoints.uses_shared_device,
+            "input": result.endpoints.input_device.model_dump(
+                mode="json",
+            ),
+            "output": result.endpoints.output_device.model_dump(
+                mode="json",
+            ),
+        },
         "stream": result.stream.model_dump(
             mode="json",
         ),
