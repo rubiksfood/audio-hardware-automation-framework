@@ -85,6 +85,23 @@ Separate PortAudio entries do not necessarily represent independent physical har
 
 The framework therefore validates each direction and then attempts the paired duplex stream through the backend.
 
+Phase 5.1 physical Scarlett testing produced the following results:
+
+| Host API | Independent input/output validation | Split-endpoint loopback |
+| --- | --- | --- |
+| WASAPI | PASS | PASS |
+| MME | PASS | PASS |
+| DirectSound | PASS | FAIL — duplex timeout |
+| Windows WDM-KS | FAIL — blocking API unsupported | Not executed |
+
+WASAPI and MME each completed three consecutive physical loopback runs using separate Scarlett input and output PortAudio indexes.
+
+DirectSound demonstrated that two individually usable endpoints do not necessarily form a usable duplex pair.
+
+WDM-KS was blocked during stream opening by PortAudio's `Blocking API not supported yet` error.
+
+These findings apply to the tested Scarlett 2i2, Focusrite driver, Windows system and PortAudio stack and should not be generalized to every device using the same host APIs.
+
 ---
 
 ### Linux
@@ -184,6 +201,10 @@ Validated areas:
 - CLI inspection
 - Cross-platform enumeration
 - Windows WASAPI stream validation
+- Windows WASAPI physical split-endpoint loopback validation
+- Windows MME physical split-endpoint loopback validation
+- Windows DirectSound split-endpoint timeout characterization
+- Windows WDM-KS blocking-API limitation characterization
 - Linux ALSA duplex validation
 
 Operating systems tested:

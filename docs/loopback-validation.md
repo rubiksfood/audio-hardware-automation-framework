@@ -721,7 +721,26 @@ Loopback validation can resolve those input and output endpoints independently a
 
 Whether a particular endpoint pair can be opened simultaneously remains dependent on PortAudio, the selected Windows host API, the installed driver and the hardware topology.
 
-The Scarlett split-endpoint workflow has automated test coverage but should not be treated as Windows hardware-validated until the corresponding physical loopback test has been completed and recorded.
+Physical split-endpoint validation was completed using a Focusrite Scarlett 2i2 (3rd Gen).
+
+On the tested Windows system:
+
+```text
+WASAPI      → PASS
+MME         → PASS
+DirectSound → duplex execution timeout
+WDM-KS      → blocking stream API unsupported
+```
+
+WASAPI and MME both completed physical output-to-input loopback using separate PortAudio input and output indexes and each passed three consecutive validation runs.
+
+The DirectSound endpoints passed independent stream validation but timed out when combined for duplex execution.
+
+WDM-KS did not reach duplex execution because PortAudio reported `Blocking API not supported yet` during stream opening.
+
+These results demonstrate that split-endpoint capability remains dependent on the selected host API and driver even when both directional endpoints are individually usable.
+
+Detailed results are recorded in [focusrite-loopback-validation.md](focusrite-loopback-validation.md).
 
 ---
 

@@ -225,7 +225,10 @@ Correcting these interpretations is part of the final Phase 5 evidence review.
 | JACK default routing + manual `capture_MONO` connection | 48 kHz | Executed | PASS | Verified physical loopback; requires manual runtime graph modification |
 | JACK | 44.1 kHz | Rejected before duplex execution | Not run | PortAudio reported `Invalid sample rate` |
 | ALSA | 44.1 kHz | Not retested after physical setup correction | Not run | Earlier unplugged-cable result is not valid physical-loopback evidence |
-| Windows PortAudio endpoints | — | No suitable single duplex endpoint | Not run | Scarlett input and output were exposed separately |
+| Windows WASAPI split endpoints | 48 kHz | Executed | PASS | Verified physical Scarlett loopback using separate input/output PortAudio indexes |
+| Windows MME split endpoints | 48 kHz | Executed | PASS | Verified physical Scarlett loopback using separate input/output PortAudio indexes |
+| Windows DirectSound split endpoints | 48 kHz | Duplex timed out | Not completed | Input/output validated independently, but paired execution did not complete |
+| Windows WDM-KS split endpoints | — | Stream opening rejected | Not run | PortAudio reported `Blocking API not supported yet` |
 
 The matrix distinguishes several different questions:
 
@@ -237,6 +240,10 @@ Can the required host routing be established automatically?
 ```
 
 A successful answer to one does not automatically prove the others.
+
+Phase 5.1 additionally demonstrates that separate PortAudio input and output entries can represent a usable physical duplex path.
+
+On the tested Windows system, WASAPI and MME successfully completed physical split-endpoint loopback, while DirectSound and WDM-KS demonstrated distinct host-API-specific limitations.
 
 Direct ALSA remains the primary Phase 5 acceptance path because it performs physical loopback without manual host-graph intervention.
 
@@ -522,26 +529,385 @@ PASS
 
 ---
 
-## Windows Limitation
+## Windows Split-Endpoint Validation — Phase 5.1
 
-The Scarlett was also investigated through the PortAudio device topology exposed on Windows.
+Phase 5 originally could not execute physical Scarlett loopback on Windows because PortAudio exposed the interface as separate input-only and output-only endpoints while the framework required one duplex `AudioDevice`.
 
-The usable Scarlett entries were exposed as separate input and output endpoints rather than one device index providing both directions.
+Phase 5.1 introduced independent `input_device` and `output_device` selection and allowed the duplex backend to use separate PortAudio device indexes.
 
-The current Phase 5 duplex contract operates on one `AudioDevice` and therefore requires one selected PortAudio device with both:
+Physical Windows validation was therefore repeated against the Focusrite Scarlett 2i2 (3rd Gen).
+
+### Test Environment
+
+| Item | Value |
+| --- | --- |
+| Test date | 2026-09-09 |
+| Operating system | Windows 11 25H2 |
+| Windows build | 26200.9445 |
+| Python version | 3.13.14 |
+| Framework branch | `feature/phase-5.1-split-duplex-endpoints` |
+| Framework commit | `8a6e8bd2763da26f198cfa5dccf3b7402a85ed74` |
+| Focusrite model | Focusrite Scarlett 2i2 (3rd Gen) |
+| Focusrite driver version | 4.143.0.261 |
+| Scarlett firmware version | 1605 |
+| `sounddevice` version | 0.5.5 |
+| PortAudio backend | PortAudio |
+| Physical output | Scarlett Output 1 |
+| Physical input | Scarlett Input 1 |
+| Cable | TRS line-level cable |
+
+### Test Objective
+
+The Windows validation aimed to determine whether the split-endpoint implementation could:
+
+- discover the Scarlett input and output endpoints independently;
+- validate each stream direction independently;
+- resolve distinct input and output PortAudio indexes;
+- execute simultaneous playback and capture;
+- pass a 1 kHz test signal through the physical Scarlett output-to-input path;
+- align and analyse the returned signal;
+- produce repeatable passing physical-loopback results;
+- identify host-API-specific limitations where the endpoint pair could not execute successfully.
+
+### Physical Test Path
+
+The physical signal path was:
 
 ```text
-input channels > 0
-output channels > 0
+framework-generated 1 kHz signal
+    ↓
+Scarlett Output 1
+    ↓
+physical line-level cable
+    ↓
+Scarlett Input 1
+    ↓
+framework capture and analysis
 ```
 
-No suitable Scarlett endpoint was available for the current physical loopback workflow on the tested Windows configuration.
+The analogue signal path was independently verified in REAPER before framework diagnostics.
 
-This does not mean that recording or playback is unsupported on Windows.
+With the cable connected, the Scarlett Input 1 indicator and the REAPER input-track meter showed the returned test signal.
 
-The framework's independent recording and playback workflows can use separate input-only and output-only device entries.
+Disconnecting the cable removed the input signal while the source playback track continued normally.
 
-The limitation applies specifically to the current single-device duplex loopback architecture.
+Reconnecting the cable restored the returned signal.
+
+This confirmed that the tested Windows physical output-to-input path was functional independently of the framework.
+
+---
+
+### Device Discovery
+
+PortAudio exposed the Scarlett through multiple Windows host APIs.
+
+Representative runtime endpoints included:
+
+| Host API | Input endpoint | Input index | Output endpoint | Output index |
+| --- | --- | ---: | --- | ---: |
+| MME | `Analogue 1 + 2 (Focusrite USB A` | 1 | `Speakers (Focusrite USB Audio)` | 4 |
+| Windows DirectSound | `Analogue 1 + 2 (Focusrite USB Audio)` | 8 | `Speakers (Focusrite USB Audio)` | 11 |
+| Windows WASAPI | `Analogue 1 + 2 (Focusrite USB Audio)` | 18 | `Speakers (Focusrite USB Audio)` | 15 |
+| Windows WDM-KS | `Analogue 1 + 2 (wc4800_8210)` | 28 | `Speakers (wr4800_8210)` | 29 |
+
+These indexes are runtime observations only and are not treated as stable device identifiers.
+
+The framework configuration selects devices through names, host APIs and channel capabilities rather than persisted indexes.
+
+![Phase 5.1 Windows device discovery](images/phase-5.1-windows-device-discovery.png)
+
+---
+
+### Independent Endpoint Validation
+
+Input-only and output-only stream validation was performed before split-duplex execution.
+
+Results:
+
+| Host API | Input validation | Output validation | Interpretation |
+| --- | --- | --- | --- |
+| MME | PASS | PASS | Both Scarlett directions opened independently |
+| Windows DirectSound | PASS | PASS | Both Scarlett directions opened independently |
+| Windows WASAPI | PASS | PASS | Both Scarlett directions opened independently |
+| Windows WDM-KS | FAIL | FAIL | PortAudio reported `Blocking API not supported yet` during stream opening |
+
+The WDM-KS failure occurred before physical duplex execution.
+
+PortAudio reported:
+
+```text
+Unanticipated host error [PaErrorCode -9999]:
+'Blocking API not supported yet'
+```
+
+The tested WDM-KS path is therefore classified as blocked by the current PortAudio stream-opening path rather than as a completed physical-loopback failure.
+
+---
+
+### Windows WASAPI — Physical Split-Endpoint PASS
+
+Windows WASAPI exposed the Scarlett as separate input and output devices:
+
+```text
+Input:
+Analogue 1 + 2 (Focusrite USB Audio)
+
+Output:
+Speakers (Focusrite USB Audio)
+```
+
+Representative stream settings:
+
+```text
+sample rate: 48000 Hz
+block size: 128
+```
+
+A representative passing run resolved:
+
+```text
+input device index:   18
+output device index:  15
+shared device:        False
+sample rate:          48000 Hz
+```
+
+The physical loopback run completed with:
+
+```text
+expected frequency:  1000.000 Hz
+measured frequency:  1000.000 Hz
+frequency error:     0.000 Hz
+tolerance:           ±5.000 Hz
+
+RMS:                 0.055759
+Peak:                0.086734
+DC offset:           0.000022
+Silence detected:    False
+Clipping detected:   False
+
+playback frames:     57,600
+captured frames:     57,600
+analysed frames:     48,000
+```
+
+Result:
+
+```text
+PASS — verified physical split-endpoint Scarlett loopback
+```
+
+The WASAPI test was repeated three consecutive times with the same overall passing result.
+
+Both fixed and backend-selected block sizes were also observed to work during subsequent testing.
+
+An earlier WASAPI diagnostic run had returned only a low-level signal with an approximately 16 kHz dominant component and failed frequency validation.
+
+That failure was not reproducible after the physical signal path was verified and testing continued.
+
+No deterministic relationship between that earlier result and the configured block size was established, so it is retained as an unexplained transient observation rather than classified as a framework defect or fixed-block-size limitation.
+
+![Phase 5.1 WASAPI physical loopback PASS](images/phase-5.1-windows-wasapi-pass.png)
+
+---
+
+### Windows MME — Physical Split-Endpoint PASS
+
+MME also exposed the Scarlett through separate input and output PortAudio indexes.
+
+Representative stream settings:
+
+```text
+sample rate: 48000 Hz
+block size: 128
+```
+
+A representative passing run resolved:
+
+```text
+input device index:   1
+output device index:  4
+shared device:        False
+sample rate:          48000 Hz
+```
+
+The physical loopback run completed with:
+
+```text
+expected frequency:  1000.000 Hz
+measured frequency:  1000.000 Hz
+frequency error:     0.000 Hz
+tolerance:           ±5.000 Hz
+
+RMS:                 0.049775
+Peak:                0.086670
+DC offset:          -0.000007
+Silence detected:    False
+Clipping detected:   False
+
+playback frames:     57,600
+captured frames:     57,600
+analysed frames:     48,000
+```
+
+Result:
+
+```text
+PASS — verified physical split-endpoint Scarlett loopback
+```
+
+The MME test was repeated three consecutive times with the same overall passing result.
+
+An earlier MME diagnostic run had returned a low-level signal with an approximately 16 kHz dominant component and failed frequency validation.
+
+As with the earlier WASAPI observation, that result was not reproducible during the final repeatability test.
+
+No confirmed root cause was established.
+
+![Phase 5.1 MME physical loopback PASS](images/phase-5.1-windows-mme-pass.png)
+
+---
+
+### Windows DirectSound — Split-Duplex Timeout
+
+The Scarlett DirectSound input and output endpoints both passed independent stream validation.
+
+Representative stream settings:
+
+```text
+sample rate: 48000 Hz
+block size: 128
+```
+
+The split-endpoint loopback test then resolved:
+
+```text
+input device index:   8
+output device index:  11
+```
+
+but duplex execution did not complete.
+
+The framework reported:
+
+```text
+Duplex execution timed out for input device index 8
+and output device index 11
+```
+
+Result:
+
+```text
+FAIL — split-duplex execution timeout
+```
+
+A diagnostic retry using the DirectSound-reported 44.1 kHz default rate and backend-selected block sizing did not change the result.
+
+The failure is therefore treated as host-API-specific behaviour on the tested Windows/PortAudio/Scarlett configuration.
+
+It does not invalidate the split-endpoint architecture because the same physical device and framework path completed successfully through WASAPI and MME.
+
+![Phase 5.1 DirectSound split-duplex timeout](images/phase-5.1-windows-directsound-timeout.png)
+
+---
+
+### Windows WDM-KS — Blocking API Unsupported
+
+The Scarlett WDM-KS endpoints were successfully discovered, but independent stream opening failed before duplex execution.
+
+Representative stream settings:
+
+```text
+sample rate: 48000 Hz
+block size: 128
+```
+
+PortAudio reported:
+
+```text
+Unanticipated host error [PaErrorCode -9999]:
+'Blocking API not supported yet'
+```
+
+This affected both the tested WDM-KS input and output paths.
+
+Result:
+
+```text
+BLOCKED — PortAudio blocking API unavailable for tested WDM-KS path
+```
+
+The WDM-KS input and output configurations were tested with both automatic and fixed block sizes. The same `Blocking API not supported yet` stream-opening failure remained, ruling out block-size configuration as the cause.
+
+Physical split-duplex loopback was therefore not attempted through WDM-KS.
+
+This result should not be reported as a completed audio-signal validation failure because execution did not reach playback or capture.
+
+![Phase 5.1 WDM-KS blocking API failure](images/phase-5.1-windows-wdmks-blocking-api.png)
+
+---
+
+### Windows Host API Result Matrix
+
+| Host API | Input stream | Output stream | Split duplex | Physical loopback | Repeatability | Final result |
+| --- | --- | --- | --- | --- | --- | --- |
+| WASAPI | PASS | PASS | Executed | PASS | 3 consecutive PASS runs | PASS |
+| MME | PASS | PASS | Executed | PASS | 3 consecutive PASS runs | PASS |
+| DirectSound | PASS | PASS | Timed out | Not completed | Repeat failure confirmed | FAIL |
+| WDM-KS | FAIL | FAIL | Not attempted | Not attempted | Not applicable | BLOCKED |
+
+These results demonstrate that successful independent input and output validation does not guarantee successful paired duplex execution.
+
+DirectSound illustrates this distinction directly: both directions opened independently, but the combined duplex operation timed out.
+
+---
+
+### Phase 5.1 Windows Acceptance
+
+The Phase 5.1 objective was to remove the architectural requirement that loopback input and output must share one PortAudio device index.
+
+That objective was validated successfully against physical hardware.
+
+The tested Scarlett completed physical split-endpoint loopback through both:
+
+```text
+Windows WASAPI → PASS
+MME            → PASS
+```
+
+with separate PortAudio indexes for input and output.
+
+The successful runs demonstrated:
+
+- independent endpoint resolution;
+- direction-aware capability validation;
+- separate PortAudio input and output indexes;
+- simultaneous playback and capture;
+- physical Scarlett DAC → cable → ADC traversal;
+- captured-signal alignment;
+- correct 1 kHz frequency recovery;
+- sample-domain metric validation;
+- separate endpoint reporting;
+- repeatable physical execution.
+
+The Phase 5.1 hardware result is therefore:
+
+```text
+PASS WITH LIMITATIONS
+```
+
+The limitations are host-API-specific:
+
+```text
+DirectSound → duplex execution timeout
+WDM-KS      → blocking stream API unsupported by tested PortAudio path
+```
+
+No claim is made that all Windows host APIs support split-endpoint duplex execution.
+
+No claim is made that arbitrary physical devices using independent sample clocks can be combined reliably.
+
+The verified results apply specifically to the tested Focusrite Scarlett 2i2 endpoint pairs, Windows environment, PortAudio stack and host APIs.
 
 ---
 
@@ -630,11 +996,22 @@ The final evidence supports the following conclusions:
 13. The reason the default capture route must remain alongside the additional `capture_MONO` connection has not yet been established.
 14. The tested JACK endpoint rejected a 44.1 kHz client stream during the earlier experiment.
 15. PortAudio device indexes and some JACK client identifiers are not stable enough to use as permanent hardware identifiers.
-16. The tested Windows device topology does not currently provide the single duplex Scarlett endpoint required by the Phase 5 implementation.
+16. Phase 5.1 removed the single-device duplex restriction and successfully validated separate Scarlett input and output PortAudio endpoints on Windows.
+17. Windows WASAPI completed repeatable physical split-endpoint loopback validation.
+18. Windows MME completed repeatable physical split-endpoint loopback validation.
+19. Both WASAPI and MME produced three consecutive passing physical-loopback runs.
+20. Windows DirectSound validated each endpoint independently but timed out during paired duplex execution.
+21. Retesting DirectSound using its reported 44.1 kHz default rate and backend-selected block sizing did not remove the timeout.
+22. Windows WDM-KS could not reach duplex execution because PortAudio reported that the blocking API was not supported for the tested stream path.
+23. Initial low-level approximately 16 kHz WASAPI and MME captures were not reproducible during final validation and no confirmed root cause was established.
+24. The Windows results demonstrate that endpoint discovery and individual stream compatibility do not guarantee that a host API can execute the endpoint pair simultaneously.
+25. Physical split-endpoint support is therefore host-API-specific rather than a universal property of all Windows PortAudio endpoints.
 
 The successful JACK diagnostics refine the earlier Phase 5 conclusion without changing its acceptance basis.
 
-Direct ALSA at 48 kHz remains the primary unattended Phase 5 physical acceptance path.
+Direct ALSA at 48 kHz remains the original Phase 5 unattended physical acceptance path.
+
+Phase 5.1 additionally establishes Windows WASAPI and MME as verified physical split-endpoint paths on the tested Scarlett system.
 
 JACK-specific routing automation remains a follow-up engineering concern.
 
@@ -732,6 +1109,7 @@ The current loopback implementation does not yet provide:
 - channel crosstalk measurements;
 - long-duration stability testing;
 - automatic recovery or hot-plug stress testing;
-- separate-device input/output duplex execution.
+- synchronization or drift compensation between independent physical devices using separate hardware clocks;
+- broader split-endpoint validation across additional Windows audio interfaces and drivers;
 
 These remain candidates for later phases.

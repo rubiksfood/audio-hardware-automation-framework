@@ -8,5 +8,5 @@ stream:
   sample_rate: 48000
   input_channels: 0
   output_channels: 2
-  block_size: null
+  block_size: 128
   dtype: "float32"
